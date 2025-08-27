@@ -1,6 +1,6 @@
 # The Linux Tool Kit, a collection of my personal tools.
 
-`/diagnostics.sh` is a **comprehensive Linux system diagnostic tool** that collects system health, networking, security, and package state information into a single Markdown report (`diagnostic.md`). 
+`/diagnostics.sh` **comprehensive Linux system diagnostic tool for debian/ubuntu** that collects system health, networking, security, and package state information into a single Markdown report (`diagnostic.md`). 
 
 `/mail-audit.py` a **a complete dns audit tool** this tools will drill into email related dns/txt/mx and security related tools. (`mail-audit.md`)
 
