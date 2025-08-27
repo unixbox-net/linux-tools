@@ -22,5 +22,3 @@ These scripts are low-level system tools intended for skilled administrators and
 - Misuse may result in data loss or system damage
 
 Please **review scripts before execution**. You are responsible for your own systems.
-
-For example, make sure you change the count request on the mail-audit script .. or may end up blacklisted ..
