@@ -4,7 +4,7 @@ This repository contains a set of specialized Linux utilities designed to help s
 
 ---
 
-## RAL (Rename and Lowercase)
+## utils/RAL (Rename and Lowercase)
 
 RAL is a high-performance utility written in C for normalizing filenames across directories. It systematically replaces spaces with dots (or another chosen character) and converts all filenames to lowercase, ensuring consistency across diverse file sets. Unlike shell scripts or Python wrappers, RAL is designed to be lightning-fast, capable of handling thousands of files in seconds.
 
@@ -18,7 +18,7 @@ This tool is particularly useful in environments where file naming standards are
 
 ---
 
-## Socket Snoop – Real-Time Socket Monitoring
+## monitoring/Socket Snoop – Real-Time Socket Monitoring
 
 Socket Snoop is a lightweight, real-time socket monitoring solution built on eBPF. It provides immediate visibility into system-level network activity by capturing TCP state transitions, source/destination IPs, ports, process IDs, and the commands behind them. The tool emphasizes clarity and speed, formatting raw kernel events into structured logs for administrators.
 
@@ -32,7 +32,7 @@ By focusing on socket states rather than raw packets, Socket Snoop simplifies ne
 
 ---
 
-## mail-audit.py – Domain & Mail Flow Auditor
+## email/mail-audit.py – Domain & Mail Flow Auditor
 
 `mail-audit.py` is a comprehensive auditing tool for email infrastructure, designed to analyze every layer of mail delivery and domain configuration. It checks DNS records, SPF/DMARC/DKIM authentication, TLS encryption quality, MX record hygiene, blacklist status, and client exposure. The tool outputs both machine-friendly JSON and clear human-readable reports, making it suitable for automation pipelines or one-off audits.
 
@@ -46,7 +46,7 @@ This tool is invaluable for system operators, security professionals, and audito
 
 ---
 
-## debian-diagnostics.sh – System Diagnostic Reporter
+## diagnostics/diagnostics.sh – System Diagnostic Reporter
 
 `debian-diagnostics.sh` is a one-stop diagnostic script that generates a detailed Markdown report (`diagnostic.md`) covering networking, system health, security posture, and package states. Designed for incident response and day-to-day troubleshooting, it collects vital data such as routing tables, DNS resolution, system logs, authentication failures, and package integrity checks in a single run.
 
