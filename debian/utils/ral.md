@@ -28,4 +28,4 @@ ral -r -d _ .         same +replae spaces with underscores _
 ```
 or 
 crontab -e 
-*/5 * * * * /usr/local/bin/ral /tv/ .
+```*/5 * * * * /usr/local/bin/ral /tv/ .```
