@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# collect_diagnostics.sh
+# debian-diagnostics.sh
 #
 # Collects a comprehensive system diagnostic into diagnostic.md (Markdown format).
 # Best on Debian/Ubuntu; degrades gracefully elsewhere.
@@ -14,7 +14,7 @@
 #   6) Performance Snapshot
 #
 # Usage:
-#   sudo ./collect_diagnostics.sh
+#   sudo ./debian-diagnostics.sh
 #
 # optinal packages
 #
