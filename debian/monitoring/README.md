@@ -5,7 +5,7 @@
 The Socket Monitoring Tool is a powerful and lightweight solution designed for system administrators who need real-time insights into socket-level network activity on their systems. By leveraging eBPF, this tool provides detailed logs of connection states, including source and destination IP addresses, ports, process IDs (PIDs), and associated commands (COMM), as well as TCP state transitions.
 
 ```plaintext
-FEATURES:
+**FEATURES:**
 - Captures TCP state changes (inet_sock_set_state tracepoint).
 - Monitors key TCP connection states like SYN_SENT, FIN_WAIT, and TIME_WAIT.
 - Tracks TCP retransmissions (tcp_retransmit_skb tracepoint), a key indicator of network issues.
@@ -16,18 +16,17 @@ FEATURES:
 - Formats IP addresses for readability.
 - Uses perf_buffer for real-time event handling.
 - Can run continuously and provide live updates via the console and log file.
-
-Real-Time Logging: Captures and logs socket connections as they occur.
+- Real-Time Logging: Captures and logs socket connections as they occur.
 - Detailed Insights: Provides source and destination IP addresses, ports, PIDs, command names, and TCP states.
 - Formatted Output: Logs are time-stamped and categorized (e.g., Opened Connection, Closed Connection, Established Connection).
 - Lightweight and Efficient: Runs efficiently using eBPF without significant performance overhead.
 
-BENEFITS:
+**BENEFITS:**
 - Simplifies network monitoring by highlighting key details often buried in more complex tools.
 - Reduces the need for deep packet analysis with tools like tcpdump or wireshark.
 - Enhances operational awareness for system administrators managing critical infrastructure.
 
-LIMITATIONS:
+**LIMITATIONS:**
 - IP4 only (wip)
 - Need to add Dynamic Filters / pid/ip/ports
 - Enhance Error Handling
