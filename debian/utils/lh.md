@@ -16,6 +16,18 @@ Buffers are sent directly to **less** for further editing and in-depth review, s
 analysis.  
 **Press `h` for help** or **`q` to quit to menu**.
 
+
+**(A)uth** Fine Every Authentication error instantly
+**(E)rrors** Identify ALL system errors effortlessly
+**(L)ive All** This special version of "tail" seemlessly "Stitches" logs together from ALL sources and appends them by timestamp to esnure they are in order.
+**(N)etwork** Rips apart anything to do with netwroking protocols.
+**(R)egEX** Simplified (or complex) rgular expression parcer.. no need for complex regular expressions simply seperate your key words error|fail|warn|ect
+**(I)P Search** Searched for ip addresses
+**(S)et Log Paths**
+**(J)SON Export**
+**(H)elp**
+
+
 **Remote Operation**
 Changing paths also accepts network shares / mounts and devices, allowing for consumption of logs from ANY TARGET local or remote.
 
