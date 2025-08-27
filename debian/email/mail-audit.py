@@ -189,7 +189,11 @@ EHLO_NAME           = "mailflow-audit"
 SAVE_CHAIN_DIR      = "/tmp"
 
 DNS_SOURCE          = "system"  # system|public|authoritative|all
-PUBLIC_RESOLVERS    = ["8.8.8.8", "1.1.1.1", "9.9.9.9"]
+PUBLIC_RESOLVERS = [
+    "8.8.8.8", "8.8.4.4",      # Google
+    "1.1.1.1", "1.0.0.1",      # Cloudflare
+    "9.9.9.9", "149.112.112.112"  # Quad9
+]
 MAX_QPS             = 1    # 0 = unlimited
 LEGAL_BANNER        = ""
 REVEAL_BANNERS      = "safe"    # never|safe|always
