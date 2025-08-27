@@ -6,16 +6,16 @@ The Socket Monitoring Tool is a powerful and lightweight solution designed for s
 
 ```plaintext
 FEATURES:
-Captures TCP state changes (inet_sock_set_state tracepoint).
-Monitors key TCP connection states like SYN_SENT, FIN_WAIT, and TIME_WAIT.
-Tracks TCP retransmissions (tcp_retransmit_skb tracepoint), a key indicator of network issues.
-Logs the process ID (PID) and command name (COMM) associated with each connection.
-Logs connection details (source/destination IP and port, process ID, and state) to /var/log/socket_monitor.log.
-Skips noisy or invalid entries, like connections with IP 0.0.0.0.
-Maps TCP states to human-readable descriptions.
-Formats IP addresses for readability.
-Uses perf_buffer for real-time event handling.
-Can run continuously and provide live updates via the console and log file.
+- Captures TCP state changes (inet_sock_set_state tracepoint).
+- Monitors key TCP connection states like SYN_SENT, FIN_WAIT, and TIME_WAIT.
+- Tracks TCP retransmissions (tcp_retransmit_skb tracepoint), a key indicator of network issues.
+- Logs the process ID (PID) and command name (COMM) associated with each connection.
+- Logs connection details (source/destination IP and port, process ID, and state) to /var/log/socket_monitor.log.
+- Skips noisy or invalid entries, like connections with IP 0.0.0.0.
+- Maps TCP states to human-readable descriptions.
+- Formats IP addresses for readability.
+- Uses perf_buffer for real-time event handling.
+- Can run continuously and provide live updates via the console and log file.
 
 Real-Time Logging: Captures and logs socket connections as they occur.
 Detailed Insights: Provides source and destination IP addresses, ports, PIDs, command names, and TCP states.
