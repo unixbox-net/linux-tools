@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-audit.py — Deep email/domain deliverability & mail-flow audit (v3.6, production)
+mail-audit.py — Deep email/domain deliverability & mail-flow audit (v3.6, production)
 
 Adds:
   • Multi-resolver & authoritative querying + resolver diff in JSON/TXT
@@ -12,11 +12,11 @@ Adds:
   • Public-safety flags: --max-qps, --legal-banner, --reveal-banners
 
 ======================================================================
- USAGE EXAMPLES — audit.py
+ USAGE EXAMPLES — mail-audit.py
 ======================================================================
 
 Basic Scan (single domain):
-  ./audit.py example.com
+  ./mail-audit.py example.com
 
   → Runs full audit against example.com
   → Outputs:
@@ -27,7 +27,7 @@ Basic Scan (single domain):
 ----------------------------------------------------------------------
 
 Multi-Domain Scan:
-  ./audit.py domain1.com domain2.com domain3.com
+  ./mail-audit.py domain1.com domain2.com domain3.com
 
   → Processes each domain in parallel
   → Creates a .json + .txt report for each
@@ -35,9 +35,9 @@ Multi-Domain Scan:
 ----------------------------------------------------------------------
 
 Increase Verbosity:
-  ./audit.py example.com -v
-  ./audit.py example.com -vv
-  ./audit.py example.com -vvv
+  ./mail-audit.py example.com -v
+  ./mail-audit.py example.com -vv
+  ./mail-audit.py example.com -vvv
 
   Levels:
     -v    → INFO
@@ -47,7 +47,7 @@ Increase Verbosity:
 ----------------------------------------------------------------------
 
 Quiet Mode (warnings only):
-  ./audit.py example.com --quiet
+  ./mail-audit.py example.com --quiet
 
   → Suppresses INFO/DEBUG
   → Only warnings/errors are shown
@@ -55,7 +55,7 @@ Quiet Mode (warnings only):
 ----------------------------------------------------------------------
 
 Dry-Run (no output files written):
-  ./audit.py example.com --dry-run
+  ./mail-audit.py example.com --dry-run
 
   → Prints plan to stdout
   → Does not create JSON/TXT reports
@@ -63,7 +63,7 @@ Dry-Run (no output files written):
 ----------------------------------------------------------------------
 
 Custom Output Directory:
-  ./audit.py example.com --outdir ./reports
+  ./mail-audit.py example.com --outdir ./reports
 
   → Places results into ./reports/
      ./reports/example.com.json
@@ -72,14 +72,14 @@ Custom Output Directory:
 ----------------------------------------------------------------------
 
 Disable Port 25 Probing:
-  ./audit.py example.com --no-port25
+  ./mail-audit.py example.com --no-port25
 
   → Skips SMTP/25 checks (useful if ISP blocks port 25)
 
 ----------------------------------------------------------------------
 
 Assume Port 25 Blocked:
-  ./audit.py example.com --assume-port25-blocked
+  ./mail-audit.py example.com --assume-port25-blocked
 
   → Adjusts scoring to avoid penalizing port 25 failures
   → Useful in cloud environments (AWS, GCP, Azure)
@@ -87,14 +87,14 @@ Assume Port 25 Blocked:
 ----------------------------------------------------------------------
 
 Force IPv6:
-  ./audit.py example.com --ipv6
+  ./mail-audit.py example.com --ipv6
 
   → Prefers AAAA records + IPv6 connectivity tests
 
 ----------------------------------------------------------------------
 
 Set DNS Timeout / Lifetime:
-  ./audit.py example.com --timeout 10 --dns-lifetime 60
+  ./mail-audit.py example.com --timeout 10 --dns-lifetime 60
 
   → DNS resolution timeout = 10s
   → DNS cache lifetime = 60s
@@ -102,7 +102,7 @@ Set DNS Timeout / Lifetime:
 ----------------------------------------------------------------------
 
 Batch via File Input (shell trick):
-  xargs -a domains.txt ./audit.py -vv --outdir ./batch_reports
+  xargs -a domains.txt ./mail-audit.py -vv --outdir ./batch_reports
 
   → domains.txt = list of domains (one per line)
   → Creates report per domain in ./batch_reports/
@@ -110,7 +110,7 @@ Batch via File Input (shell trick):
 ----------------------------------------------------------------------
 
 Integration with Pipelines:
-  ./audit.py example.com --dry-run | jq '.'
+  ./mail-audit.py example.com --dry-run | jq '.'
 
   → Produces JSONL stream
   → Parse with jq for automation/CI pipelines
