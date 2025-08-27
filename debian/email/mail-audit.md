@@ -1,4 +1,4 @@
-# Mailflow Audit (`mail-audit.py`)
+# Mail Audit (`mail-audit.py`)
 
 **Deep email/domain deliverability & mail-flow audit tool**
 
