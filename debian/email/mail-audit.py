@@ -24,6 +24,15 @@ Basic Scan (single domain):
        example.com.txt    (human-readable report)
        /tmp/ssl_chain_*   (TLS chain PEMs & dumps)
 
+Careful interactive run:
+./mail-audit.py example.com --max-qps 2
+
+Batch file, be polite:
+xargs -a domains.txt ./mail-audit.py --max-qps 1 --outdir reports
+
+Very large batches (or corporate network):
+xargs -a domains.txt ./mail-audit.py --max-qps 0.5 --no-port25 --outdir reports
+
 ----------------------------------------------------------------------
 
 Multi-Domain Scan:
