@@ -49,30 +49,14 @@ troubleshooting.
 
 # Install.
 
-  this bootstrap installer should work for yum/dnf/apt based package installers, tested on rocky 8.9
-  
   ```bash
-  sudo su -
-  curl -sL https://github.com/unixbox-net/lh/raw/main/install.sh | sudo bash
+  ./install.sh
   lh
   ```
 
-  Output files can be found
-  ```bash
-  ~/lh/rpmbuild/BUILD/lh-1.0.0/lh (compiled binary)
-  ~/lh/rpmbuild/RPMS/x86_64/lh-1.0.0-1.el8.x86_64.rpm (package)
-  etc
-  ```
    
   Depedicies
   ```bash
   json-c readline
-
-  dnf install json-c-devel
-  dnf install readline-devel
-  clang lh.c -o lh -lreadline -ljson-c
   ```
-
-FreeBSD
-clang -I/usr/local/include -L/usr/local/lib -ljson-c -lreadline -lncurses lh.c -o lh
 
