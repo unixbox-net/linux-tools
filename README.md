@@ -1,6 +1,6 @@
 # debian-diagnostics.sh
 
-`collect_diagnostics.sh` is a **comprehensive Linux system diagnostic tool** that collects system health, networking, security, and package state information into a single Markdown report (`diagnostic.md`).  
+`debian-diagnostics.sh` is a **comprehensive Linux system diagnostic tool** that collects system health, networking, security, and package state information into a single Markdown report (`diagnostic.md`).  
 
 It’s designed to give sysadmins and SREs a **fast, portable, no-nonsense way to gather troubleshooting data** — useful for incident response, debugging, and audits.  
 
