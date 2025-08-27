@@ -18,20 +18,20 @@ FEATURES:
 - Can run continuously and provide live updates via the console and log file.
 
 Real-Time Logging: Captures and logs socket connections as they occur.
-Detailed Insights: Provides source and destination IP addresses, ports, PIDs, command names, and TCP states.
-Formatted Output: Logs are time-stamped and categorized (e.g., Opened Connection, Closed Connection, Established Connection).
-Lightweight and Efficient: Runs efficiently using eBPF without significant performance overhead.
+- Detailed Insights: Provides source and destination IP addresses, ports, PIDs, command names, and TCP states.
+- Formatted Output: Logs are time-stamped and categorized (e.g., Opened Connection, Closed Connection, Established Connection).
+- Lightweight and Efficient: Runs efficiently using eBPF without significant performance overhead.
 
 BENEFITS:
-Simplifies network monitoring by highlighting key details often buried in more complex tools.
-Reduces the need for deep packet analysis with tools like tcpdump or wireshark.
-Enhances operational awareness for system administrators managing critical infrastructure.
+- Simplifies network monitoring by highlighting key details often buried in more complex tools.
+- Reduces the need for deep packet analysis with tools like tcpdump or wireshark.
+- Enhances operational awareness for system administrators managing critical infrastructure.
 
 LIMITATIONS:
-IP4 only (wip)
-Need to add Dynamic Filters / pid/ip/ports
-Enhance Error Handling
-Perfomance Tuning
+- IP4 only (wip)
+- Need to add Dynamic Filters / pid/ip/ports
+- Enhance Error Handling
+- Perfomance Tuning
 ```
 ## Use Cases
 
