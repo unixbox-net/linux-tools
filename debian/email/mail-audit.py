@@ -182,7 +182,7 @@ def log_error(msg: str): logger.error(msg)
 # -------- Tunables (overridable via CLI) --------
 DEFAULT_TCP_TIMEOUT = 5.0
 DNS_LIFETIME        = 4.0
-MAX_WORKERS         = 48
+MAX_WORKERS         = 10
 PREFER_IPV6         = False
 SMTP_BANNER_READ    = 2.0
 EHLO_NAME           = "mailflow-audit"
@@ -190,7 +190,7 @@ SAVE_CHAIN_DIR      = "/tmp"
 
 DNS_SOURCE          = "system"  # system|public|authoritative|all
 PUBLIC_RESOLVERS    = ["8.8.8.8", "1.1.1.1", "9.9.9.9"]
-MAX_QPS             = 3    # 0 = unlimited
+MAX_QPS             = 1    # 0 = unlimited
 LEGAL_BANNER        = ""
 REVEAL_BANNERS      = "safe"    # never|safe|always
 
