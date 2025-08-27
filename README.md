@@ -1,4 +1,4 @@
-# The Linux Tools, A few select scripts to get you started.
+# The Linux Tools, A few select utils to get you started.
 
 This repository contains a curated set of specialized Linux utilities designed to simplify system administration, security auditing, and troubleshooting. Each tool is lightweight, efficient, and crafted to address specific operational challenges — from normalizing filenames to monitoring sockets, auditing mail systems, diagnosing servers, and analyzing logs.  
 
