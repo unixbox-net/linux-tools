@@ -1,4 +1,4 @@
-# Linux Tools Collection
+# A Linux Tool Kit for Debian/Ubuntu admins
 
 This repository contains a curated set of specialized Linux utilities designed to simplify system administration, security auditing, and troubleshooting. Each tool is lightweight, efficient, and crafted to address specific operational challenges — from normalizing filenames to monitoring sockets, auditing mail systems, diagnosing servers, and analyzing logs.  
 
