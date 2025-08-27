@@ -1,4 +1,4 @@
-# ral (Rename & Lowercase)
+# ral (Rename and Lowercase)
 
 RAL is a powerful utility written in C to mass rename files by replacing spaces with dots and converting all characters to lowercase. It's designed for efficiency and speed, handling large volumes of files quickly without the overhead of a scripting language.
 
