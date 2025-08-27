@@ -1,6 +1,6 @@
 # ral (Rename & Lowercase)
 
-The RAL script is a powerful utility written in C to mass rename files by replacing spaces with dots and converting all characters to lowercase. It's designed for efficiency and speed, handling large volumes of files quickly without the overhead of a scripting language.
+RAL is a powerful utility written in C to mass rename files by replacing spaces with dots and converting all characters to lowercase. It's designed for efficiency and speed, handling large volumes of files quickly without the overhead of a scripting language.
 
 ## Motivation
 Provide a fast, reliable way to normalize file names across various directories, especially useful in environments where file naming consistency is crucial.
