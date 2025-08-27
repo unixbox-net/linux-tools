@@ -2,7 +2,7 @@
 
 **Deep email/domain deliverability & mail-flow audit tool**
 
-`audit.py` is a comprehensive **mail infrastructure audit script** for domains.  
+`mail-audit.py` is a comprehensive **mail infrastructure audit script** for domains.  
 It verifies DNS, authentication policies, TLS configurations, MX hygiene, blacklist status,  
 client surface exposure, and much more — producing both JSON and human-readable reports.
 
