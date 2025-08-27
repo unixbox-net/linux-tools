@@ -26,7 +26,7 @@ set -euo pipefail
 # -----------------------------
 # General configuration / env
 # -----------------------------
-OUT="diagnostic.md"                            # Output Markdown file
+OUT="results-$HOSTNAME.md"                               # Output Markdown file
 TS="$(date -u +"%Y-%m-%d %H:%M:%S UTC")"       # Timestamp used in header
 HOST="$(hostname -f 2>/dev/null || hostname)"  # Try FQDN, fallback to short
 PATH=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/sbin:/usr/local/bin
