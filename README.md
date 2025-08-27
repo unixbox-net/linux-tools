@@ -16,7 +16,7 @@ This tool is particularly useful in environments where file naming standards are
 - Replace spaces in filenames with dots (or custom characters).  
 - Convert all filenames to lowercase automatically.  
 - Recursively process directories with speed and accuracy.  
-- Safely handle conflicts by overwriting duplicates.  
+- Safely handle conflicts by overwriting duplicates.
 
 ---
 
