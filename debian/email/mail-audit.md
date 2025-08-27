@@ -110,13 +110,13 @@ pip install --upgrade pip
 pip install dnspython cryptography pyOpenSSL requests
 
 # Make the script executable
-chmod +x ./audit.py
+chmod +x ./mail-audit.py
 
 # Activate the virtual environment
 source ~/mail_audit-venv/bin/activate
 
 # Run an audit against a domain
-python ./audit.py example.com
+python ./mail-audit.py example.com
 
 # Deactivate environment when finished
 deactivate
