@@ -1,4 +1,4 @@
-# aws-meta.py – AWS EC2 Metadata Inspector
+# meta-scrape.py – AWS EC2 Metadata Inspector
 
 The **AWS Metadata Inspector** is a lightweight Python utility that queries the **AWS EC2 Instance Metadata Service (IMDS)** to provide a clean, human-friendly view of an instance’s identity and environment.  
 
