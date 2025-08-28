@@ -42,9 +42,11 @@ It supports both **IMDSv2 (token-based, recommended)** and **IMDSv1 (fallback)**
 # Verbose mode (debug HTTP traffic)
 ./aws-meta.py -v
 
----
+```
 
-## Examples
+---
+## Example
+full.json 
 
 {
   "dynamic": {
