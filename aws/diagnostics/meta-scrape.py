@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-aws-meta.py — AWS EC2 Metadata Inspector (IMDSv2-first, v1 fallback)
+AWS EC2 Metadata Inspector (IMDSv2-first, v1 fallback)
 
 Usage:
-  ./aws-meta.py                     # summary (Markdown)
-  ./aws-meta.py --format json       # summary (JSON)
-  ./aws-meta.py --full > full.json  # full dump (JSON)
-  ./aws-meta.py -v                  # verbose
+  ./meta-scrape.py                     # summary (Markdown)
+  ./meta-scrape.py --format json       # summary (JSON)
+  ./meta-scrape.py --full > full.json  # full dump (JSON)
+  ./meta-scrap.py -v                  # verbose
 
 Exit codes:
   0 = success
@@ -16,7 +16,7 @@ Exit codes:
 
 Dependency:
   pip install requests
-License: MIT
+License: BSD 2 Clause 
 """
 
 from __future__ import annotations
