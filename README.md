@@ -75,3 +75,18 @@ For deeper analysis, LogHog provides a secondary `LESS` mode, which buffers logs
 - Remote-ready, blazing fast, and capable of handling massive log sets.  
 
 ---
+
+meta-scrape.py – AWS EC2 Metadata Inspector  
+meta-scrape.py is a lightweight Python utility that queries the AWS EC2 Instance Metadata Service (IMDS) to provide a clean, human-friendly view of an instance’s identity and environment. It supports both IMDSv2 (secure, token-based) and IMDSv1 (fallback), and presents results in either Markdown or JSON, making it equally useful for human troubleshooting or machine automation.  
+
+This tool is particularly valuable for operators, SREs, and security teams who need quick, credential-free insight into where a system is running, which account it belongs to, and how it is configured. Beyond one-off checks, its JSON output makes it a natural fit for automation pipelines, inventory management, and monitoring dashboards.  
+
+**Key Features**  
+- Fetch instance identity data directly from AWS IMDS without API keys.  
+- Summary mode: display essentials such as instance ID, type, region, availability zone, account ID, hostname, IPs, and IAM role.  
+- Full mode: export the entire metadata tree in JSON with sensitive fields redacted.  
+- IMDSv2-first with fallback to IMDSv1, including a clear warning if v1 is used.  
+- Multiple output formats (Markdown or JSON) for human or machine consumption.  
+- Robust HTTP client with retries, timeouts, and urllib3 v1/v2 compatibility.
+
+---
