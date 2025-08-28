@@ -46,8 +46,9 @@ It supports both **IMDSv2 (token-based, recommended)** and **IMDSv1 (fallback)**
 
 ---
 ## Example
-full.json 
+`full.json`
 
+```json
 {
   "dynamic": {
     "instance-identity": {
@@ -82,5 +83,4 @@ full.json
   },
   "notes": []
 }
-
----
+```
