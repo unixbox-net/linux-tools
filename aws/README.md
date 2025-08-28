@@ -53,34 +53,33 @@ It supports both **IMDSv2 (token-based, recommended)** and **IMDSv1 (fallback)**
   "dynamic": {
     "instance-identity": {
       "document": {
-        "accountId": "252144205993",
+        "accountId": "123456789012",
         "architecture": "x86_64",
-        "availabilityZone": "ca-central-1a",
+        "availabilityZone": "us-east-1a",
         "billingProducts": null,
         "devpayProductCodes": null,
-        "imageId": "ami-0ca3fe9992272540b",
-        "instanceId": "i-075916e4f9e35a39e",
+        "imageId": "ami-0123456789abcdef0",
+        "instanceId": "i-0123456789abcdef0",
         "instanceType": "t3.micro",
         "kernelId": null,
         "marketplaceProductCodes": null,
         "pendingTime": "2025-08-28T03:13:12Z",
-        "privateIp": "172.31.28.114",
+        "privateIp": "10.0.1.23",
         "ramdiskId": null,
-        "region": "ca-central-1",
+        "region": "us-east-1",
         "version": "2017-09-30"
       }
     }
   },
   "meta-data": {
-    "hostname": "ip-172-31-28-114.ca-central-1.compute.internal",
-    "instance-id": "i-075916e4f9e35a39e",
+    "hostname": "ip-10-0-1-23.ec2.internal",
+    "instance-id": "i-0123456789abcdef0",
     "instance-type": "t3.micro",
-    "local-ipv4": "172.31.28.114",
+    "local-ipv4": "10.0.1.23",
     "placement": {
-      "availability-zone": "ca-central-1a"
+      "availability-zone": "us-east-1a"
     },
-    "public-ipv4": "3.96.194.31"
+    "public-ipv4": "203.0.113.42"
   },
   "notes": []
 }
-```
