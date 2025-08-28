@@ -83,3 +83,19 @@ It supports both **IMDSv2 (token-based, recommended)** and **IMDSv1 (fallback)**
   },
   "notes": []
 }
+
+```
+
+## Usecases
+
+- Ops – Quickly confirm account, region, instance type, and IAM role when you SSH into a host.
+- Security – Detect insecure IMDSv1 usage; safe, redacted output for audits.
+- Cost/Architecture – Spot instance type and placement across your fleet.
+- Automation – JSON output drops easily into pipelines or scripts.
+
+## Integrations
+
+- A systemd service that refreshes metadata snapshots regularly.
+- A Prometheus exporter (or Node Exporter textfile collector) for Grafana dashboards.
+- An S3 fleet inventory uploader (every instance drops its metadata JSON into a bucket).
+- A CI/CD helper for region/account-aware automation.
