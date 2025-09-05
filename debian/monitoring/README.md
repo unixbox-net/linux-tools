@@ -60,7 +60,7 @@ pytest -q
 sudo .venv/bin/python socket_snoop.py --log-file /var/log/socket_monitor.log
 ```
 
-#2 Make Install/Run
+#2 Or "Make" Install/Run
 ```
 make setup     # installs system deps (you already did this manually above)
 make deps      # venv + pip deps
