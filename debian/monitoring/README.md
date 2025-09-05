@@ -230,3 +230,75 @@ A connection lifecycle starts with an Established state,
 transitions through CLOSE_WAIT, 
 and eventually reaches Closed.
 Each state change is associated with the process managing it (e.g., sshd-session or swapper).
+
+# Frequently Asked Questions (FAQ)
+
+---
+
+### 1. How is Socket Snoop different from tcpdump or Wireshark?
+- **tcpdump/wireshark** capture **packets** (payloads, headers, full frames).  
+- **socket_snoop** captures **events at the socket level** (who opened/closed connections, which process, what IP/port).  
+- Benefit: no packet payloads → less noisy, more privacy-friendly, and easier to parse.  
+- Example:  
+  - tcpdump might show: `SYN 192.168.1.10:54321 -> 172.217.0.46:443`  
+  - socket_snoop shows: `PID=1234 COMM=curl opened connection to google.com:443`.  
+
+---
+
+### 2. Why should I use Socket Snoop instead of tcpdump/wireshark?
+- When you care about **which process/PID** created the connection.  
+- When you want **real-time event logs** without packet captures.  
+- When you need to debug **application-level network issues** (not low-level packet flows).  
+- Faster setup: one script, no filters needed.  
+
+---
+
+### 3. How does Socket Snoop compare to Prometheus/Grafana?
+- **Socket Snoop**: forensic/debug tool, process-level visibility, real-time logs.  
+- **Prometheus/Grafana**: monitoring tool, long-term metrics, dashboards.  
+- Use both: Socket Snoop for debugging *now*, Prometheus for monitoring *trends*.  
+
+---
+
+### 4. Does it replace tcpdump or wireshark?
+- No — it **complements** them.  
+- tcpdump/wireshark are for deep packet inspection.  
+- socket_snoop is for **connection lifecycle visibility** (who, when, how).  
+
+---
+
+### 5. What are practical use cases?
+- **Security**: detect unexpected outbound connections (`PID=1234 COMM=nc connecting to 203.x.x.x:22`).  
+- **Debugging**: verify whether an app retries connections or leaks sockets.  
+- **Performance**: identify retransmits or excessive TIME_WAIT states.  
+- **Auditing**: maintain logs of which process accessed which remote host.  
+- **Forensics**: run on a server under investigation to see live connections without dumping traffic.  
+
+---
+
+### 6. Can it monitor all containers or just the host?
+- With `--pid=host --net=host` in Docker, it can monitor **all host + container connections**.  
+- In Kubernetes, run as a privileged DaemonSet for node-wide monitoring.  
+
+---
+
+### 7. Is this lightweight? Will it slow my server?
+- Yes, it’s lightweight.  
+- Runs via **eBPF** tracepoints (kernel-supported, low overhead).  
+- No packet copying, no payloads captured → minimal performance cost.  
+
+---
+
+### 8. What about IPv6?
+- Currently supports **IPv4 only** (work in progress).  
+- IPv6 support can be added by extending the BPF program.  
+
+---
+
+### 9. Can I run it as a background service?
+- Yes.  
+- A systemd service is included:  
+  ```bash
+  sudo cp systemd/socket-snoop.service /etc/systemd/system/
+  sudo systemctl enable --now socket-snoop.service
+  sudo systemctl status socket-snoop.service
