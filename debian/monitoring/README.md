@@ -39,40 +39,59 @@ Performance Debugging: Identify network latency or dropped connections by observ
 Audit Logging: Maintain a comprehensive record of all socket-level network interactions.
 Real-Time Monitoring: Observe live network activity without the complexity of tools like tcpdump or wireshark. In addition, no network frames are captured so it's perfect for high security networks.
 
-## Install
-For the script version simply ensure you have python 3.11+
-```plaintext
-pip install bcc
-python3 /root/scripts/socket-snoop.py
-```
-or as a service 
-```plaintext
-cat <<EOF > /etc/systemd/system/sockets-monitor.service
-[Unit]
-Description=Socket Monitoring Service
-After=network.target
+## Install Options
 
-[Service]
-Type=simple
-ExecStart=/usr/bin/python3 /root/scripts/sockets.py  #edit to taste
-Restart=on-failure
-StandardOutput=syslog
-StandardError=syslog
-SyslogIdentifier=sockets-monitor
-WorkingDirectory=/root/scripts/  #edit to taste
-User=root
-Environment=PYTHONUNBUFFERED=1
-
-[Install]
-WantedBy=multi-user.target
-EOF
+# Option 1 - Install / One shot
 ```
-and
-```plaintext
-systemctl daemon-reload
-systemctl enable sockets-monitor
-systemctl start sockets-monitor
-systemctl status sockets-monitor
+# download repo
+git clone git@github.com:unixbox-net/linux-tools.git
+cd linux-tools/debian/monitoring
+
+# make enviroment
+python3 -m venv .venv
+. .venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt
+
+# test
+pytest -q
+
+#  un socket_snoop
+sudo .venv/bin/python socket_snoop.py --log-file /var/log/socket_monitor.log
+```
+
+#2 Make Install/Run
+```
+make setup     # installs system deps (you already did this manually above)
+make deps      # venv + pip deps
+make test      # runs pytest
+sudo make run
+```
+
+#3 As a service
+```
+sudo sed -i "s|/opt/socket-snoop|$HOME/linux-tools|g" systemd/socket-snoop.service\
+sudo cp systemd/socket-snoop.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now socket-snoop.service
+sudo systemctl status socket-snoop.service
+```
+
+#4 in Docker
+```
+cd ~/linux-tools/debian/monitoring
+docker build -t socket-snoop:latest .
+
+docker run --rm -it \
+  --privileged \
+  --pid=host \
+  --net=host \
+  -v /lib/modules:/lib/modules:ro \
+  -v /usr/src:/usr/src:ro \
+  -v /sys:/sys:ro \
+  -v /var/log:/var/log \
+  socket-snoop:latest \
+  /app/.venv/bin/python /app/socket_snoop.py --log-file /var/log/socket_monitor.log
 ```
 
 ### Log Examples
