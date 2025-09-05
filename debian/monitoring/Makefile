@@ -18,7 +18,7 @@ setup:
 	./scripts/install-deps-debian.sh
 
 venv:
-	python3 -m venv $(VENV)
+	python3 -m venv --system-site-packages $(VENV)
 	$(PIP) install --upgrade pip
 
 deps: venv
