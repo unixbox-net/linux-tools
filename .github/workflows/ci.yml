@@ -18,18 +18,41 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+
     steps:
       - uses: actions/checkout@v4
+
+      - name: Show tree (context)
+        run: |
+          pwd
+          ls -al
+          ls -al debian/monitoring || true
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.10"
-      - name: Install bcc python bindings
-        run: sudo apt-get update && sudo apt-get install -y python3-bpfcc
-      - name: Install deps & run tests
+          python-version: '3.10'
+
+      - name: Install bcc python bindings (with retries)
+        run: |
+          set -euxo pipefail
+          for i in 1 2 3; do
+            sudo apt-get update && sudo apt-get install -y python3-bpfcc && break || sleep 5
+          done
+
+      - name: Create venv and install deps
         working-directory: debian/monitoring
         run: |
+          set -euxo pipefail
           python3 -m venv .venv
           .venv/bin/pip install --upgrade pip
           .venv/bin/pip install -r requirements.txt
-          .venv/bin/pytest -q
+          .venv/bin/python -V
+          .venv/bin/pip list
+
+      - name: Run pytest (verbose)
+        working-directory: debian/monitoring
+        run: |
+          set -euxo pipefail
+          .venv/bin/pytest -q -ra -vv
