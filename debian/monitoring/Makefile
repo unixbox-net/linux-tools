@@ -30,7 +30,7 @@ deps: venv
 	$(PIP) install -r requirements.txt
 
 test: deps
-	$(PY) -m pytest -q
+	PYTHONPATH=$(shell pwd) $(PY) -m pytest -q -ra -vv
 
 run: deps
 	sudo $(PY) $(APP) --log-file /var/log/socket_monitor.log

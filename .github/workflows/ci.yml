@@ -52,6 +52,8 @@ jobs:
           .venv/bin/pip list
 
       - name: Run pytest (verbose)
+        env:
+          PYTHONPATH: .
         working-directory: debian/monitoring
         run: |
           set -euxo pipefail
