@@ -1,3 +1,4 @@
+# /etc/systemd/system/socket-snoop.service
 [Unit]
 Description=Socket Snoop eBPF monitor
 After=network.target
@@ -5,11 +6,16 @@ Wants=network.target
 
 [Service]
 Type=simple
-# Replace /opt/socket-snoop with your absolute repo path
-ExecStart=/usr/bin/env bash -lc '/opt/socket-snoop/.venv/bin/python /opt/socket-snoop/debian/monitoring/socket_snoop.py --log-file=/var/log/socket_monitor.log'
 User=root
-Restart=always
-RestartSec=2
+WorkingDirectory=/root/linux-tools/debian/monitoring
+ExecStart=/usr/bin/python3 /root/linux-tools/debian/monitoring/socket_snoop.py --log-file=/var/log/socket_monitor.log
+Restart=on-failure
+RestartSec=3
+
+# Optional hardening (root still required for eBPF; drop if it causes issues)
+# CapabilityBoundingSet=CAP_BPF CAP_SYS_ADMIN CAP_NET_ADMIN
+# AmbientCapabilities=CAP_BPF CAP_SYS_ADMIN CAP_NET_ADMIN
+# NoNewPrivileges=true
 
 [Install]
 WantedBy=multi-user.target
