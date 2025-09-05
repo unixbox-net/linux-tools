@@ -41,13 +41,17 @@ Real-Time Monitoring: Observe live network activity without the complexity of to
 
 ## Install Options
 
-#1 - Install / One shot
+#1 - One-Shot Install/Run
 ```
 # download repo
 git clone git@github.com:unixbox-net/linux-tools.git
 cd linux-tools/debian/monitoring
 
-# make enviroment
+# install system deps
+chmod +x install-deps-debian.sh
+sudo ./install-deps-debian.sh
+
+# make venv + install python deps
 python3 -m venv .venv
 . .venv/bin/activate
 pip install --upgrade pip
@@ -56,33 +60,66 @@ pip install -r requirements.txt
 # test
 pytest -q
 
-#  un socket_snoop
+# run socket_snoop
 sudo .venv/bin/python socket_snoop.py --log-file /var/log/socket_monitor.log
 ```
 
-#2 Or "Make" Install/Run
+#2 "Make" Install/Run
 ```
-make setup     # installs system deps (you already did this manually above)
-make deps      # venv + pip deps
+make setup     # installs system deps
+make deps      # creates venv + pip deps
 make test      # runs pytest
-sudo make run
+sudo make run  # runs the monitor
 ```
 
 #3 As a service
 ```
-sudo sed -i "s|/opt/socket-snoop|$HOME/linux-tools|g" systemd/socket-snoop.service\
+sudo sed -i "s|/opt/socket-snoop|$HOME/linux-tools|g" systemd/socket-snoop.service
 sudo cp systemd/socket-snoop.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now socket-snoop.service
 sudo systemctl status socket-snoop.service
 ```
 
-#4 in Docker
+#4 Install Docker Debian 13
+```
+# remove old versions
+sudo apt-get remove -y docker docker-engine docker.io containerd runc || true
+
+# deps
+sudo apt-get update
+sudo apt-get install -y ca-certificates curl gnupg lsb-release
+
+# gpg key
+sudo install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/debian/gpg | \
+  sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+sudo chmod a+r /etc/apt/keyrings/docker.gpg
+
+# repo for Debian 13 "trixie"
+echo \
+  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
+  https://download.docker.com/linux/debian \
+  $(lsb_release -cs) stable" | \
+  sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+# install engine + cli + plugins
+sudo apt-get update
+sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+
+# enable + start
+sudo systemctl enable --now docker
+
+# test
+sudo docker run hello-world
+```
+# Build and Run Docker Image
 ```
 cd ~/linux-tools/debian/monitoring
-docker build -t socket-snoop:latest .
+export DOCKER_BUILDKIT=1
+sudo docker build --network host --pull -t socket-snoop:latest .
 
-docker run --rm -it \
+sudo docker run --rm -it \
   --privileged \
   --pid=host \
   --net=host \
@@ -93,6 +130,7 @@ docker run --rm -it \
   socket-snoop:latest \
   /app/.venv/bin/python /app/socket_snoop.py --log-file /var/log/socket_monitor.log
 ```
+
 
 ### Testing
 In another terminal
