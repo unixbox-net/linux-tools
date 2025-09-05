@@ -5,7 +5,7 @@ Wants=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/env bash -lc '/path/to/repo/.venv/bin/python monitoring/socket-snoop.py --log-file=/var/log/socket_monitor.log'
+ExecStart=/usr/bin/env bash -lc 'https://github.com/unixbox-net/linux-tools/debian/monitoring/.venv/bin/python monitoring/socket-snoop.py --log-file=/var/log/socket_monitor.log'
 User=root
 Restart=always
 RestartSec=2
