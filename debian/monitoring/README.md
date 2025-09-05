@@ -60,6 +60,12 @@ pytest -q
 sudo .venv/bin/python socket_snoop.py --log-file /var/log/socket_monitor.log
 ```
 
+Testing, In another terminal
+```
+curl http://example.com/ >/dev/null 2>&1 || true
+nc -vz google.com 80 || true
+---
+
 #2 Make Install/Run
 ```
 make setup     # installs system deps (you already did this manually above)
