@@ -24,7 +24,7 @@ This tool is particularly useful in environments where file naming standards are
 
 Socket Snoop is a lightweight, real-time socket monitoring solution built on eBPF. It provides immediate visibility into system-level network activity by capturing TCP state transitions, source/destination IPs, ports, process IDs, and the commands behind them. The tool emphasizes clarity and speed, formatting raw kernel events into structured logs for administrators.  
 
-By focusing on socket states rather than raw packets, Socket Snoop simplifies network debugging, security monitoring, and operational audits. It reduces the need for heavier tools like `tcpdump` or Wireshark while maintaining a low system footprint. Its real-time log file output and optional continuous monitoring make it a reliable companion for live production systems.  
+By focusing on socket states rather than raw packets, Socket Snoop simplifies network debugging, security monitoring, and operational audits. It's designed to enhance tools like `tcpdump` or Wireshark while maintaining a low system footprint. Its real-time log file output and optional continuous monitoring make it a reliable companion for live production systems.  
 
 **Key Features**
 - Capture and log live TCP state changes using eBPF.  
