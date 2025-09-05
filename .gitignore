@@ -32,3 +32,10 @@ Thumbs.db
 # Tag files
 tags
 TAGS
+.venv/
+__pycache__/
+*.pyc
+*.log
+.pytest_cache/
+dist/
+build/

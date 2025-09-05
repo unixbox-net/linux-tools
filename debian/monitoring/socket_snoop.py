@@ -10,7 +10,6 @@ import os
 import sys
 from datetime import datetime
 from collections import deque
-from bcc import BPF
 
 def parse_args():
     p = argparse.ArgumentParser(description="Enhanced Socket Monitoring Script")
@@ -45,7 +44,6 @@ struct data_t {
 BPF_PERF_OUTPUT(events);
 
 TRACEPOINT_PROBE(sock, inet_sock_set_state) {
-    // Only IPv4 for now
     if (args->family != AF_INET)
         return 0;
 
@@ -55,7 +53,6 @@ TRACEPOINT_PROBE(sock, inet_sock_set_state) {
     data.uid = bpf_get_current_uid_gid();
     bpf_get_current_comm(&data.comm, sizeof(data.comm));
 
-    // Safely read parent PID
     struct task_struct *task = (struct task_struct *)bpf_get_current_task();
     u32 ppid = 0;
     if (task != NULL && task->real_parent != NULL) {
@@ -63,7 +60,6 @@ TRACEPOINT_PROBE(sock, inet_sock_set_state) {
     }
     data.ppid = ppid;
 
-    // For inet_sock_set_state, saddr/daddr are IPv4 in network byte order
     data.src_ip = args->saddr;
     data.dst_ip = args->daddr;
     data.src_port = ntohs(args->sport);
@@ -91,11 +87,6 @@ TCP_STATES = {
 }
 
 def format_ip(ip_u32: int) -> str:
-    return ".".join(str((ip_u32 >> (8 * shift)) & 0xFF) for shift in (0,1,2,3))[::-1].split('.')[::-1] and \
-        ".".join(str((ip_u32 >> shift) & 0xFF) for shift in (0,8,16,24)[::-1])
-
-# Clear, correct implementation (keeping the old trick above defensive)
-def format_ip(ip_u32: int) -> str:  # noqa: F811  (shadow intentionally)
     return ".".join(str((ip_u32 >> s) & 0xFF) for s in (24, 16, 8, 0))
 
 def connection_id(src_ip, src_port, dst_ip, dst_port) -> str:
@@ -109,7 +100,6 @@ def main():
 
     args = parse_args()
 
-    # Prepare logging
     log_file = args.log_file
     try:
         if not os.path.exists(log_file):
@@ -119,6 +109,7 @@ def main():
         print(f"Warning: cannot write to {log_file}; falling back to ./socket_monitor.log", file=sys.stderr)
         log_file = "./socket_monitor.log"
 
+    from bcc import BPF   # lazy import so tests don’t need bcc
     b = BPF(text=BPF_PROGRAM)
 
     metrics = {
@@ -126,8 +117,7 @@ def main():
         "closing_connections": 0,
         "closed_connections": 0,
     }
-
-    recent_events = deque(maxlen=2000)   # bounded cache
+    recent_events = deque(maxlen=2000)
 
     def handle_event(cpu, data, size):
         event = b["events"].event(data)
@@ -137,21 +127,13 @@ def main():
         src_ip = format_ip(event.src_ip)
         dst_ip = format_ip(event.dst_ip)
 
-        # Filters
-        if args.pid and event.pid != args.pid:
-            return
-        if args.src_ip and src_ip != args.src_ip:
-            return
-        if args.dst_ip and dst_ip != args.dst_ip:
-            return
-        if args.src_port and event.src_port != args.src_port:
-            return
-        if args.dst_port and event.dst_port != args.dst_port:
-            return
-        if args.active_only and event.state != 1:
-            return
+        if args.pid and event.pid != args.pid: return
+        if args.src_ip and src_ip != args.src_ip: return
+        if args.dst_ip and dst_ip != args.dst_ip: return
+        if args.src_port and event.src_port != args.src_port: return
+        if args.dst_port and event.dst_port != args.dst_port: return
+        if args.active_only and event.state != 1: return
 
-        # Metrics
         if event.state == 1:
             metrics["active_connections"] += 1
         elif event.state in (4,5,8,9,11):
@@ -161,7 +143,8 @@ def main():
                 metrics["active_connections"] -= 1
             metrics["closed_connections"] += 1
 
-        event_key = (src_ip, event.src_port, dst_ip, event.dst_port, event.pid, event.state)
+        event_key = (src_ip, int(event.src_port), dst_ip, int(event.dst_port),
+                     int(event.pid), int(event.state))
         if event_key in recent_events:
             return
         recent_events.append(event_key)

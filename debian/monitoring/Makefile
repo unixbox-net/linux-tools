@@ -3,7 +3,7 @@ VENV := .venv
 PY := $(VENV)/bin/python
 PIP := $(VENV)/bin/pip
 
-.PHONY: help setup venv deps lint test run clean docker build-deb
+.PHONY: help setup venv deps test run docker clean
 
 help:
 	@echo "make setup      - install system deps (Debian/Ubuntu)"
@@ -28,7 +28,7 @@ test: deps
 	$(PY) -m pytest -q
 
 run: deps
-	sudo $(PY) monitoring/socket-snoop.py
+	sudo $(PY) socket_snoop.py
 
 docker:
 	docker build -t socket-snoop:latest .

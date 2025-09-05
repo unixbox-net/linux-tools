@@ -1,4 +1,4 @@
-from monitoring.socket-snoop import format_ip, connection_id  # type: ignore
+from socket_snoop import format_ip, connection_id  # type: ignore
 
 def test_format_ip():
     assert format_ip(0x7F000001) == "127.0.0.1"

@@ -5,7 +5,8 @@ Wants=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/env bash -lc 'https://github.com/unixbox-net/linux-tools/debian/monitoring/.venv/bin/python monitoring/socket-snoop.py --log-file=/var/log/socket_monitor.log'
+# Replace /opt/socket-snoop with your absolute repo path
+ExecStart=/usr/bin/env bash -lc '/opt/socket-snoop/.venv/bin/python /opt/socket-snoop/debian/monitoring/socket_snoop.py --log-file=/var/log/socket_monitor.log'
 User=root
 Restart=always
 RestartSec=2
