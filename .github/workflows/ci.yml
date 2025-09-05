@@ -1,19 +1,39 @@
 name: CI
-on: [push, pull_request]
+
+on:
+  push:
+    paths:
+      - 'debian/monitoring/**'
+      - '.github/workflows/**'
+  pull_request:
+    paths:
+      - 'debian/monitoring/**'
+      - '.github/workflows/**'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.10"
-      - name: Install bcc python bindings (non-root)
+          python-version: '3.10'
+
+      # We don't actually need bcc for the unit tests, but this keeps imports consistent
+      - name: Install bcc python bindings
         run: sudo apt-get update && sudo apt-get install -y python3-bpfcc
+
       - name: Install deps & run tests
         working-directory: debian/monitoring
         run: |
           python3 -m venv .venv
+          .venv/bin/pip install --upgrade pip
           .venv/bin/pip install -r requirements.txt
           .venv/bin/pytest -q
