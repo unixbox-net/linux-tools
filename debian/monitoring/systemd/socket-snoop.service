@@ -1,0 +1,14 @@
+[Unit]
+Description=Socket Snoop eBPF monitor
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/env bash -lc '/path/to/repo/.venv/bin/python monitoring/socket-snoop.py --log-file=/var/log/socket_monitor.log'
+User=root
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
