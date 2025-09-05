@@ -53,15 +53,24 @@ TRACEPOINT_PROBE(sock, inet_sock_set_state) {
     data.uid = bpf_get_current_uid_gid();
     bpf_get_current_comm(&data.comm, sizeof(data.comm));
 
+    // parent PID (verifier-safe)
     struct task_struct *task = (struct task_struct *)bpf_get_current_task();
     u32 ppid = 0;
-    if (task != NULL && task->real_parent != NULL) {
+    if (task && task->real_parent) {
         bpf_probe_read_kernel(&ppid, sizeof(ppid), &task->real_parent->tgid);
     }
     data.ppid = ppid;
 
-    data.src_ip = args->saddr;
-    data.dst_ip = args->daddr;
+    // Debian 13 (BCC 0.31) uses __u8[4] for saddr/daddr in this tracepoint
+    data.src_ip = ((u32)args->saddr[0] << 24) |
+                  ((u32)args->saddr[1] << 16) |
+                  ((u32)args->saddr[2] <<  8) |
+                  ((u32)args->saddr[3]);
+    data.dst_ip = ((u32)args->daddr[0] << 24) |
+                  ((u32)args->daddr[1] << 16) |
+                  ((u32)args->daddr[2] <<  8) |
+                  ((u32)args->daddr[3]);
+
     data.src_port = ntohs(args->sport);
     data.dst_port = ntohs(args->dport);
     data.state = args->newstate;
