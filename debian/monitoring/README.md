@@ -41,7 +41,7 @@ Real-Time Monitoring: Observe live network activity without the complexity of to
 
 ## Install Options
 
-#1 - One-Shot Install/Run
+## One-Shot Install/Run
 ```
 # download repo
 git clone git@github.com:unixbox-net/linux-tools.git
@@ -64,7 +64,7 @@ pytest -q
 sudo .venv/bin/python socket_snoop.py --log-file /var/log/socket_monitor.log
 ```
 
-#2 "Make" Install/Run
+## "Make" Install/Run
 ```
 make setup     # installs system deps
 make deps      # creates venv + pip deps
@@ -72,7 +72,7 @@ make test      # runs pytest
 sudo make run  # runs the monitor
 ```
 
-#3 As a service
+## As a service
 ```
 sudo sed -i "s|/opt/socket-snoop|$HOME/linux-tools|g" systemd/socket-snoop.service
 sudo cp systemd/socket-snoop.service /etc/systemd/system/
@@ -81,7 +81,7 @@ sudo systemctl enable --now socket-snoop.service
 sudo systemctl status socket-snoop.service
 ```
 
-#4 Install Docker Debian 13
+## Install Docker Debian 13
 ```
 # remove old versions
 sudo apt-get remove -y docker docker-engine docker.io containerd runc || true
@@ -113,7 +113,7 @@ sudo systemctl enable --now docker
 # test
 sudo docker run hello-world
 ```
-# Build and Run Docker Image
+## Build and Run Docker Image
 ```
 cd ~/linux-tools/debian/monitoring
 export DOCKER_BUILDKIT=1
