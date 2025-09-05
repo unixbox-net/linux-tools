@@ -41,7 +41,7 @@ Real-Time Monitoring: Observe live network activity without the complexity of to
 
 ## Install Options
 
-# Option 1 - Install / One shot
+#1 - Install / One shot
 ```
 # download repo
 git clone git@github.com:unixbox-net/linux-tools.git
