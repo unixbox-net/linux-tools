@@ -20,6 +20,7 @@
 #
 # Credentials:
 #   Use env (AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / AWS_SESSION_TOKEN), or AWS_PROFILE, or default chain.
+# REQUIRES AWS commandline tool
 
 set -euo pipefail
 
