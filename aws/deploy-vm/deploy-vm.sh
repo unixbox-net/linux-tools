@@ -32,7 +32,7 @@ INSTANCE_NAME="${INSTANCE_NAME:-my-micro}"
 INSTANCE_TYPE="${INSTANCE_TYPE:-t2.micro}"
 ARCH="${ARCH:-x86_64}"                                 # x86_64 | arm64
 OS_IMAGE="${OS_IMAGE:-al2023}"                         # only 'al2023' implemented
-VOLUME_SIZE_GB="${VOLUME_SIZE_GB:-8}"		       # /root size
+VOLUME_SIZE_GB="${VOLUME_SIZE_GB:-8}"		               # /root size
 KMS_KEY_ID="${KMS_KEY_ID:-}"                           # optional CMK for EBS; else account default
 
 # Networking
