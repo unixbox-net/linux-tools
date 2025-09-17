@@ -91,3 +91,20 @@ This tool is particularly valuable for operators, SREs, and security teams who n
 - Robust HTTP client with retries, timeouts, and urllib3 v1/v2 compatibility.
 
 ---
+
+---
+## deploy_aws.sh – Minimal AWS EC2 Micro Deployer
+
+deploy_aws.sh is a safe-by-default Bash helper to deploy or destroy a Free Tier micro EC2 instance with strong security defaults. It reuses or creates a minimal security group, enforces IMDSv2, launches Amazon Linux 2023 (x86_64 or arm64) via SSM public parameters, and optionally SSHes in once the instance is ready. A local state file makes clean teardown trivial.
+
+**Key Features**
+- One command to deploy or destroy a micro EC2 instance.
+- IMDSv2 required, EBS encrypted (gp3) by default.
+- Reuse or create Security Group; auto-authorize SSH from your current /32.
+- Smart public IP association (auto honors subnet default).
+- Import an existing key pair or create a new PEM automatically.
+- Optional AUTO_SSH into the instance after boot.
+- Clean stateful teardown (deletes instance, SG, key pair, and local PEM if created).
+- Sensible tags and configurable region/profile.
+
+---
