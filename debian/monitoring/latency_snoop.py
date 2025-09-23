@@ -18,6 +18,18 @@ Requirements
 - bcc and matching kernel headers (apt install bpfcc-tools linux-headers-$(uname -r), or distro equivalent)
 - prometheus_client (pip install prometheus_client)
 
+# basic run with JSON output
+sudo ./socket_latency_ultra.py --json
+
+# add Prometheus on port 9900 (default low-card labels)
+sudo ./socket_latency_ultra.py --prometheus-port 9900
+
+# high-cardinality per-flow labels (use sparingly!)
+sudo ./socket_latency_ultra.py --prometheus-port 9900 --per-flow
+
+# include user-space stacks (needs symbols for pretty names)
+sudo ./socket_latency_ultra.py --stacks --prometheus-port 9900
+
 Tested on recent kernels with BCC 0.31+. Tracepoint field shapes vary; this code targets
 inet_sock_set_state with __u8[4] saddr/daddr (common on modern distros). Adjust noted spots if needed.
 """
