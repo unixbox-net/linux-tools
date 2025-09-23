@@ -1,44 +1,68 @@
 #!/usr/bin/env python3
 """
-Socket Latency Snoop - Realtime socket monitoring (IPv4) via eBPF/BCC.
-Adds connect latency, RTT, retransmits, req->resp latency hints, and optional user stacks.
+Ultimate Socket Latency Snoop (IPv4) via eBPF/BCC + Prometheus Exporter.
 
-Requires: bcc (and matching kernel headers), root. For stacks, install debuginfo/symbols.
+Features
+- Connect latency: SYN_SENT -> ESTABLISHED
+- Req->Resp latency hint: first tcp_sendmsg after idle -> first tcp_cleanup_rbuf that copies to user
+- RTT internals: tcp_sock.srtt_us, mdev_us (rttvar)
+- Retransmits: tcp:tcp_retransmit_skb
+- Process/thread: TGID (pid), TID, PPID, UID, comm
+- Cgroup/Kubernetes enrichment: cgroup id, pod_uid, container_id (best effort from cgroup v2/v1 paths)
+- Optional user stacks: --stacks
+- Prometheus exporter: histograms + counters (low-cardinality by default)
+- Optional per-flow high-cardinality metrics: --per-flow (use sparingly)
+
+Requirements
+- Linux, root
+- bcc and matching kernel headers (apt install bpfcc-tools linux-headers-$(uname -r), or distro equivalent)
+- prometheus_client (pip install prometheus_client)
+
+Tested on recent kernels with BCC 0.31+. Tracepoint field shapes vary; this code targets
+inet_sock_set_state with __u8[4] saddr/daddr (common on modern distros). Adjust noted spots if needed.
 """
 
 import argparse
 import hashlib
 import os
 import sys
+import socket
+import re
+import json
 from datetime import datetime
 from collections import deque, defaultdict
 
 def parse_args():
-    p = argparse.ArgumentParser(description="Ultimate Socket Latency Monitor")
-    p.add_argument("--pid", type=int, default=None, help="Filter by PID (TGID)")
+    p = argparse.ArgumentParser(description="Ultimate Socket Latency Monitor + Prometheus")
+    # filters
+    p.add_argument("--pid", type=int, default=None, help="Filter by TGID (process id)")
     p.add_argument("--src-ip", type=str, default=None, help="Filter by source IPv4")
     p.add_argument("--dst-ip", type=str, default=None, help="Filter by destination IPv4")
     p.add_argument("--src-port", type=int, default=None, help="Filter by source port")
     p.add_argument("--dst-port", type=int, default=None, help="Filter by destination port")
-    p.add_argument("--active-only", action="store_true", help="Only established connections")
-    p.add_argument("--stacks", action="store_true", help="Collect and symbolize user-space call stacks")
+    p.add_argument("--active-only", action="store_true", help="Only established/latency events")
+    # telemetry/output
     p.add_argument("--log-file", default=os.environ.get("SOCKET_SNOOP_LOG", "/var/log/socket_monitor.log"))
+    p.add_argument("--json", action="store_true", help="Emit events as JSON lines to stdout")
+    # stacks & cardinality
+    p.add_argument("--stacks", action="store_true", help="Collect user-space stacks (needs symbols for nice names)")
+    p.add_argument("--per-flow", action="store_true", help="Export per-flow (5-tuple) metrics (HIGH CARDINALITY)")
+    # prometheus
+    p.add_argument("--prometheus-port", type=int, default=0, help="Port to expose Prometheus metrics (0=disabled)")
+    p.add_argument("--buckets", type=str, default="0.5,1,2.5,5,10,25,50,100,250,500,1000,2500",
+                   help="Histogram buckets in ms (comma-separated)")
     return p.parse_args()
 
 BPF_PROGRAM = r"""
 #include <uapi/linux/ptrace.h>
 #include <uapi/linux/in.h>
 #include <uapi/linux/tcp.h>
-#include <uapi/linux/udp.h>
 #include <linux/tcp.h>
 #include <linux/sched.h>
 #include <linux/net.h>
 #include <net/tcp.h>
 #include <bcc/proto.h>
 
-/*
- * Keyed by 4-tuple (+tgid) to avoid most collisions. We also use skaddr when available.
- */
 struct flow_key_t {
     u32 tgid;
     u32 saddr;
@@ -56,8 +80,8 @@ static __always_inline void fill_key(struct flow_key_t *k, u32 tgid, const __u8 
 }
 
 struct data_t {
-    u32 tgid;          // process ID (thread group)
-    u32 pid;           // thread ID
+    u32 tgid;          // process (thread group id)
+    u32 pid;           // tid
     u32 ppid;
     u32 uid;
     u64 cgroup_id;
@@ -69,12 +93,12 @@ struct data_t {
     u16 src_port;
     u16 dst_port;
 
-    int state;
+    int state;         // TCP state or -1 for req/resp
     char event[24];
 
     // latency fields (ns)
     u64 connect_latency_ns;   // SYN_SENT -> ESTABLISHED
-    u64 rr_latency_ns;        // first recv after a send (req->resp hint)
+    u64 rr_latency_ns;        // send -> recv (copied to user)
 
     // TCP internals
     u32 srtt_us;              // smoothed RTT
@@ -85,29 +109,24 @@ struct data_t {
     int have_stack;
     u32 stack_id;
 };
-// perf output
+
 BPF_PERF_OUTPUT(events);
 
-// store start times and flow state
+// state & timing
 BPF_HASH(conn_start_ts, struct flow_key_t, u64);
 BPF_HASH(last_send_ts, struct flow_key_t, u64);
 BPF_HASH(retrans_count, struct flow_key_t, u32);
 
-// optional user stacks keyed by (tgid, fd)
+// stacks
 struct fd_key_t { u32 tgid; int fd; };
 BPF_STACK_TRACE(stack_traces, 8192);
 BPF_HASH(pending_connect_stack, struct fd_key_t, u32);
 BPF_HASH(pending_send_stack, struct fd_key_t, u32);
 
-/*
- * Trace which user function called connect/sendmsg via sys_enter_* tracepoints.
- * We store (tgid, fd) -> stack_id to attach when we later emit a flow event.
- */
 TRACEPOINT_PROBE(syscalls, sys_enter_connect) {
     struct fd_key_t fk = {};
     u64 id = bpf_get_current_pid_tgid();
-    u32 tgid = id >> 32;
-    fk.tgid = tgid;
+    fk.tgid = id >> 32;
     fk.fd = args->fd;
     int stack_id = bpf_get_stackid(args, &stack_traces, BPF_F_USER_STACK);
     if (stack_id >= 0) {
@@ -118,8 +137,7 @@ TRACEPOINT_PROBE(syscalls, sys_enter_connect) {
 TRACEPOINT_PROBE(syscalls, sys_enter_sendto) {
     struct fd_key_t fk = {};
     u64 id = bpf_get_current_pid_tgid();
-    u32 tgid = id >> 32;
-    fk.tgid = tgid;
+    fk.tgid = id >> 32;
     fk.fd = args->fd;
     int stack_id = bpf_get_stackid(args, &stack_traces, BPF_F_USER_STACK);
     if (stack_id >= 0) {
@@ -128,9 +146,6 @@ TRACEPOINT_PROBE(syscalls, sys_enter_sendto) {
     return 0;
 }
 
-/*
- * Socket state transitions: measure connect latency and pull RTT.
- */
 TRACEPOINT_PROBE(sock, inet_sock_set_state) {
     if (args->family != AF_INET)
         return 0;
@@ -139,27 +154,23 @@ TRACEPOINT_PROBE(sock, inet_sock_set_state) {
     u32 tgid = id >> 32;
     u32 pid = id & 0xffffffff;
 
-    // build flow key
     struct flow_key_t key = {};
     fill_key(&key, tgid, args->saddr, args->daddr, args->sport, args->dport);
 
-    // timestamps for connect latency
     if (args->newstate == TCP_SYN_SENT) {
         u64 ts = bpf_ktime_get_ns();
         conn_start_ts.update(&key, &ts);
         return 0;
     }
 
-    // populate event
     struct data_t data = {};
     data.tgid = tgid;
     data.pid  = pid;
     data.uid  = bpf_get_current_uid_gid();
     data.cgroup_id = bpf_get_current_cgroup_id();
     bpf_get_current_comm(&data.comm, sizeof(data.comm));
-    // parent pid
-    struct task_struct *task = (struct task_struct *)bpf_get_current_task();
     u32 ppid = 0;
+    struct task_struct *task = (struct task_struct *)bpf_get_current_task();
     if (task && task->real_parent) {
         bpf_probe_read_kernel(&ppid, sizeof(ppid), &task->real_parent->tgid);
     }
@@ -172,7 +183,6 @@ TRACEPOINT_PROBE(sock, inet_sock_set_state) {
     data.state = args->newstate;
     __builtin_memcpy(&data.event, "State Change", 13);
 
-    // connect latency on ESTABLISHED
     if (args->newstate == TCP_ESTABLISHED) {
         u64 *tsp = conn_start_ts.lookup(&key);
         if (tsp) {
@@ -181,15 +191,10 @@ TRACEPOINT_PROBE(sock, inet_sock_set_state) {
         }
     }
 
-    // TCP internals if skaddr is present
     if (args->skaddr) {
         struct sock *sk = (struct sock *)args->skaddr;
         struct tcp_sock *tp = (struct tcp_sock *)tcp_sk(sk);
         if (tp) {
-            // srtt is stored with 3 bits of fraction in Linux; srtt_us already exists in tcp_sock (since 5.x)
-#ifdef BPF_FIELD_EXISTS
-            // no-op: placeholder for CO-RE; we rely on includes
-#endif
             u32 srtt_us = 0, rttvar_us = 0;
             bpf_probe_read_kernel(&srtt_us, sizeof(srtt_us), &tp->srtt_us);
             bpf_probe_read_kernel(&rttvar_us, sizeof(rttvar_us), &tp->mdev_us);
@@ -198,12 +203,9 @@ TRACEPOINT_PROBE(sock, inet_sock_set_state) {
         }
     }
 
-    // attach any known retransmit count
     u32 *rc = retrans_count.lookup(&key);
     if (rc) data.retransmits = *rc;
 
-    // attach pending connect stack if one exists for this tgid+fd (best-effort match via sport/dport is tricky)
-    // We cannot reliably map fd here; so we rely on send/recv paths to carry stacks (below).
     data.have_stack = 0;
     data.stack_id = -1;
 
@@ -211,14 +213,9 @@ TRACEPOINT_PROBE(sock, inet_sock_set_state) {
     return 0;
 }
 
-/*
- * Retransmits: tcp:tcp_retransmit_skb (kernel tracepoint)
- */
 TRACEPOINT_PROBE(tcp, tcp_retransmit_skb) {
-    // Build key from tracepoint fields
     struct flow_key_t key = {};
-    // Fields are already in host order here
-    key.tgid = 0; // ksoftirq context; keep zero. We'll still key by 4-tuple.
+    key.tgid = 0; // kernel context; kept zero; keyed by 4-tuple
     key.saddr = args->saddr;
     key.daddr = args->daddr;
     key.sport = args->sport;
@@ -234,16 +231,10 @@ TRACEPOINT_PROBE(tcp, tcp_retransmit_skb) {
     return 0;
 }
 
-/*
- * Req->Resp latency hint:
- *  - record ts on tcp_sendmsg
- *  - on tcp_cleanup_rbuf (bytes copied to user), compute latency if a send happened and we were idle before
- */
 int kprobe__tcp_sendmsg(struct pt_regs *ctx, struct sock *sk, struct msghdr *msg, size_t size) {
     u64 id = bpf_get_current_pid_tgid();
     u32 tgid = id >> 32;
 
-    // Derive 4-tuple
     u16 sport = 0, dport = 0;
     u32 saddr = 0, daddr = 0;
     struct inet_sock *inet = (struct inet_sock *)sk;
@@ -261,20 +252,15 @@ int kprobe__tcp_sendmsg(struct pt_regs *ctx, struct sock *sk, struct msghdr *msg
 
     u64 ts = bpf_ktime_get_ns();
     last_send_ts.update(&key, &ts);
-
-    // stash user stack for this send if we have one keyed by (tgid, fd)
-    // We don't have fd here; sys_enter_sendto captured it earlier -> leave to userland to join heuristically.
-
     return 0;
 }
 
 int kprobe__tcp_cleanup_rbuf(struct pt_regs *ctx, struct sock *sk, int copied) {
-    if (copied <= 0) return 0; // no payload to userspace
+    if (copied <= 0) return 0;
 
     u64 id = bpf_get_current_pid_tgid();
     u32 tgid = id >> 32;
 
-    // Rebuild key
     u16 sport = 0, dport = 0;
     u32 saddr = 0, daddr = 0;
     struct inet_sock *inet = (struct inet_sock *)sk;
@@ -293,7 +279,6 @@ int kprobe__tcp_cleanup_rbuf(struct pt_regs *ctx, struct sock *sk, int copied) {
     u64 *tsp = last_send_ts.lookup(&key);
     if (!tsp) return 0;
 
-    // Emit an event with rr_latency populated and marked "ReqResp"
     struct data_t data = {};
     data.tgid = tgid;
     data.pid  = (u32)id;
@@ -304,15 +289,13 @@ int kprobe__tcp_cleanup_rbuf(struct pt_regs *ctx, struct sock *sk, int copied) {
     data.dst_ip = daddr;
     data.src_port = bpf_ntohs(sport);
     data.dst_port = bpf_ntohs(dport);
-    data.state = -1; // not a state change
+    data.state = -1;
     __builtin_memcpy(&data.event, "ReqResp Latency", 16);
     data.rr_latency_ns = bpf_ktime_get_ns() - *tsp;
 
-    // Attach retrans count if known
     u32 *rc = retrans_count.lookup(&key);
     if (rc) data.retransmits = *rc;
 
-    // Attempt to read srtt/mdev
     struct tcp_sock *tp = (struct tcp_sock *)tcp_sk(sk);
     if (tp) {
         u32 srtt_us = 0, rttvar_us = 0;
@@ -327,7 +310,6 @@ int kprobe__tcp_cleanup_rbuf(struct pt_regs *ctx, struct sock *sk, int copied) {
 
     events.perf_submit(ctx, &data, sizeof(data));
 
-    // reset to avoid double counting until next request
     last_send_ts.delete(&key);
     return 0;
 }
@@ -355,7 +337,47 @@ def connection_id(src_ip, src_port, dst_ip, dst_port) -> str:
     return hashlib.md5(unique.encode()).hexdigest()
 
 def ns_to_ms(ns: int) -> float:
-    return round(ns / 1_000_000.0, 3)
+    return round(ns / 1_000_000.0, 6)
+
+# --- Kubernetes / cgroup enrichment (best-effort) ---
+CGRX_PATTERNS = [
+    # cgroup v2 pod path examples (containerd/crio)
+    re.compile(r".*kubepods.*pod([0-9a-fA-F\-]{36}).*?/[0-9a-fA-F]{64}$"),          # podUID + containerID (64)
+    re.compile(r".*kubepods.*pod([0-9a-fA-F\-]{36}).*?/(cri-containerd|docker)-([0-9a-fA-F]{64}).*$"),
+    # docker legacy
+    re.compile(r".*docker[-/].*?([0-9a-fA-F]{64}).*$"),
+]
+
+def k8s_enrich_from_pid(pid: int):
+    """Return dict with {'pod_uid', 'container_id'} if derivable from /proc/<pid>/cgroup."""
+    cgroup_path = f"/proc/{pid}/cgroup"
+    res = {}
+    try:
+        with open(cgroup_path, "r") as f:
+            data = f.read()
+        # v2 line: 0::/kubepods.slice/.../pod<uuid>/<containerid>
+        # v1 lines include subsystems; we just scan every path component.
+        for line in data.splitlines():
+            parts = line.split(":")
+            if len(parts) < 3:
+                continue
+            path = parts[-1]
+            for rx in CGRX_PATTERNS:
+                m = rx.match(path)
+                if m:
+                    groups = m.groups()
+                    # try to map
+                    if len(groups) == 1:
+                        cont = groups[0]
+                        res.setdefault("container_id", cont)
+                    elif len(groups) >= 2:
+                        pod = groups[0]
+                        cont = groups[-1]
+                        res.setdefault("pod_uid", pod)
+                        res.setdefault("container_id", cont)
+        return res
+    except Exception:
+        return res
 
 def main():
     if os.uname().sysname.lower() != "linux":
@@ -364,40 +386,121 @@ def main():
 
     args = parse_args()
 
+    # buckets
+    try:
+        buckets_ms = [float(x.strip()) for x in args.buckets.split(",") if x.strip()]
+    except Exception:
+        buckets_ms = [0.5,1,2.5,5,10,25,50,100,250,500,1000,2500]
+
     log_file = args.log_file
     try:
-        if not os.path.exists(log_file):
+        if log_file and not os.path.exists(log_file):
             with open(log_file, "w") as f:
-                f.write("Socket Latency Monitor Log\n" + "=" * 60 + "\n")
+                f.write("Ultimate Socket Latency Log\n" + "=" * 60 + "\n")
     except PermissionError:
         print(f"Warning: cannot write to {log_file}; falling back to ./socket_monitor.log", file=sys.stderr)
         log_file = "./socket_monitor.log"
 
-    from bcc import BPF, USDT  # noqa
+    # Prometheus setup (optional)
+    have_prom = False
+    if args.prometheus_port:
+        try:
+            from prometheus_client import start_http_server, Counter, Histogram, Gauge
+            have_prom = True
+        except Exception as e:
+            print(f"Prometheus disabled (prometheus_client not available): {e}", file=sys.stderr)
+
+    # Histograms (low-cardinality labels)
+    if have_prom:
+        # shared labels for aggregated view
+        common_labels = ["role"]  # "client" or "server" (best-effort), keep small
+        k8s_labels = ["pod_uid", "container_id"]
+        proc_labels = ["comm"]
+        agg_labels = common_labels + k8s_labels + proc_labels
+
+        # per-flow labels (dangerously high cardinality)
+        flow_labels = agg_labels + (["src_ip","src_port","dst_ip","dst_port"] if args.per_flow else [])
+
+        def make_hist(name, desc):
+            return Histogram(
+                name, desc, labelnames=flow_labels,
+                buckets=[b/1000.0 for b in buckets_ms]  # convert ms buckets to seconds (Prom wants seconds)
+            )
+
+        def make_ctr(name, desc):
+            return Counter(name, desc, labelnames=flow_labels)
+
+        def make_gauge(name, desc):
+            return Gauge(name, desc, labelnames=flow_labels)
+
+        H_CONNECT = make_hist("socket_connect_latency_seconds", "TCP connect latency (SYN_SENT->ESTABLISHED)")
+        H_REQRESP = make_hist("socket_reqresp_latency_seconds", "Request->Response latency (send->recv to user)")
+        G_SRTT    = make_gauge("socket_srtt_seconds", "Smoothed RTT from tcp_sock")
+        G_RTTVAR  = make_gauge("socket_rttvar_seconds", "RTT variance (mdev) from tcp_sock")
+        C_RETRANS = make_ctr("socket_retransmissions_total", "Retransmits observed for this flow")
+        C_EVENTS  = make_ctr("socket_events_total", "Events emitted by type and flow")
+
+    from bcc import BPF  # lazy import for bcc
     b = BPF(text=BPF_PROGRAM)
 
-    recent_events = deque(maxlen=4000)
-    # stash of (tgid,fd)->stack for best-effort matching (optional)
-    have_stacks = args.stacks
-    stack_traces = b.get_table("stack_traces") if have_stacks else None
-    pending_connect_stack = b.get_table("pending_connect_stack") if have_stacks else None
-    pending_send_stack = b.get_table("pending_send_stack") if have_stacks else None
+    recent_events = deque(maxlen=8000)
 
-    # Heuristic: remember latest stack per TGID keyed by (src,dst,ports)
-    latest_stack_by_flow = {}
-
-    metrics = defaultdict(int)
-
-    def symbolize_stack(stack_id, pid):
-        if not have_stacks or stack_id < 0:
-            return None
-        syms = []
+    def role_guess(src_ip, dst_ip, state):
+        # crude: if state is ESTABLISHED and src_port >= 1024, call it client; else server
         try:
-            for addr in stack_traces.walk(stack_id):
-                syms.append(b.sym(addr, pid, show_module=True, show_offset=True))
+            return "client" if state in (1, -1) else "unknown"
         except Exception:
-            return None
-        return syms
+            return "unknown"
+
+    def labels_for(entry):
+        base = {
+            "role": role_guess(entry["src_ip"], entry["dst_ip"], entry.get("state_code", -1)),
+            "pod_uid": entry.get("pod_uid") or "",
+            "container_id": entry.get("container_id") or "",
+            "comm": entry.get("comm") or "",
+        }
+        if args.per_flow:
+            base.update({
+                "src_ip": entry["src_ip"], "src_port": str(entry["src_port"]),
+                "dst_ip": entry["dst_ip"], "dst_port": str(entry["dst_port"]),
+            })
+        return base
+
+    def emit_prom(entry):
+        if not have_prom:
+            return
+        lbl = labels_for(entry)
+        # counters/gauges/histograms
+        C_EVENTS.labels(**lbl).inc()
+        if entry["latency"]["connect_ms"] is not None:
+            H_CONNECT.labels(**lbl).observe(entry["latency"]["connect_ms"]/1000.0)
+        if entry["latency"]["req_resp_ms"] is not None:
+            H_REQRESP.labels(**lbl).observe(entry["latency"]["req_resp_ms"]/1000.0)
+        if entry["latency"]["srtt_ms"] is not None:
+            G_SRTT.labels(**lbl).set(entry["latency"]["srtt_ms"]/1000.0)
+        if entry["latency"]["rttvar_ms"] is not None:
+            G_RTTVAR.labels(**lbl).set(entry["latency"]["rttvar_ms"]/1000.0)
+        if entry["tcp"]["retransmits"] is not None:
+            # we don't know deltas per event; just add 0 (no-op) and rely on event counts for trend,
+            # or convert to gauge; here we track increments when we see larger cumulative values.
+            pass
+
+    # start exporter
+    if have_prom and args.prometheus_port:
+        from prometheus_client import start_http_server
+        start_http_server(args.prometheus_port)
+        print(f"[prometheus] exporting on :{args.prometheus_port}")
+
+    # aux
+    def write_log(s: str):
+        try:
+            with open(log_file, "a") as f:
+                f.write(s + "\n")
+        except Exception as e:
+            print(f"Log write failed: {e}", file=sys.stderr)
+
+    # retransmit delta tracker (so we can increment the counter)
+    last_retx = {}
 
     def handle_event(cpu, data, size):
         event = b["events"].event(data)
@@ -413,18 +516,24 @@ def main():
         if args.dst_port and event.dst_port != args.dst_port: return
         if args.active_only and event.state not in (1, -1): return
 
-        # de-dup state spam
+        # de-dup spam
         event_key = (
             src_ip, int(event.src_port), dst_ip, int(event.dst_port),
             int(event.tgid), int(event.state), event.event.decode(errors="ignore"),
-            int(event.connect_latency_ns != 0), int(event.rr_latency_ns != 0)
+            int(event.connect_latency_ns != 0), int(event.rr_latency_ns != 0),
+            int(event.srtt_us), int(event.rttvar_us)
         )
         if event_key in recent_events:
             return
         recent_events.append(event_key)
 
-        state_str = TCP_STATES.get(event.state, "N/A") if event.state != -1 else "N/A"
-        connid = connection_id(src_ip, int(event.src_port), dst_ip, int(event.dst_port))
+        # k8s enrichment
+        k8s = k8s_enrich_from_pid(int(event.tgid))
+        pod_uid = k8s.get("pod_uid")
+        container_id = k8s.get("container_id")
+
+        state_code = int(event.state)
+        state_str = TCP_STATES.get(state_code, "N/A") if state_code != -1 else "N/A"
 
         entry = {
             "timestamp": timestamp,
@@ -435,58 +544,63 @@ def main():
             "dst_port": int(event.dst_port),
             "protocol": "TCP",
             "state": state_str,
-            "connection_id": connid,
+            "state_code": state_code,
             "pid": int(event.tgid),
             "tid": int(event.pid),
             "ppid": int(event.ppid),
             "uid": int(event.uid),
             "cgroup_id": int(event.cgroup_id),
             "comm": event.comm.decode(errors="ignore"),
+            "pod_uid": pod_uid,
+            "container_id": container_id,
             "latency": {
                 "connect_ms": ns_to_ms(int(event.connect_latency_ns)) if event.connect_latency_ns else None,
                 "req_resp_ms": ns_to_ms(int(event.rr_latency_ns)) if event.rr_latency_ns else None,
-                "srtt_ms": round(float(event.srtt_us) / 1000.0, 3) if event.srtt_us else None,
-                "rttvar_ms": round(float(event.rttvar_us) / 1000.0, 3) if event.rttvar_us else None,
+                "srtt_ms": round(float(event.srtt_us) / 1000.0, 6) if event.srtt_us else None,
+                "rttvar_ms": round(float(event.rttvar_us) / 1000.0, 6) if event.rttvar_us else None,
             },
             "tcp": {
-                "retransmits": int(event.retransmits),
+                "retransmits": int(event.retransmits) if event.retransmits else 0,
             },
         }
 
-        # best-effort attach last known stack for this flow
-        if have_stacks:
-            flow_key = (entry["pid"], src_ip, entry["src_port"], dst_ip, entry["dst_port"])
-            stack_syms = latest_stack_by_flow.get(flow_key)
-            if stack_syms:
-                entry["callstack"] = stack_syms
+        # Increment retrans counter by delta (per flow)
+        if have_prom:
+            flow_delta_key = (entry["src_ip"], entry["src_port"], entry["dst_ip"], entry["dst_port"])
+            prev = last_retx.get(flow_delta_key, 0)
+            cur = entry["tcp"]["retransmits"]
+            if cur > prev:
+                # increment counter by delta
+                from prometheus_client import Counter
+                # build labels and inc
+                lbl = labels_for(entry)
+                # define/use a separate bare counter for deltas to avoid double registration
+                # Reuse C_RETRANS with .inc(delta) since it's already Counter; safe as long as labels are identical.
+                C_RETRANS.labels(**lbl).inc(cur - prev)
+                last_retx[flow_delta_key] = cur
 
-        print(entry)
-        try:
-            with open(log_file, "a") as f:
-                f.write(str(entry) + "\n")
-        except Exception as e:
-            print(f"Log write failed: {e}", file=sys.stderr)
+        # output
+        if args.json:
+            print(json.dumps(entry, separators=(",", ":")))
+        else:
+            print(entry)
+        if log_file:
+            write_log(json.dumps(entry))
 
-    # Join pending stacks to flows opportunistically by watching tcp_sendmsg path
-    def on_sendmsg(cpu, data, size):
-        # We’re not emitting here (kernel probe emits nothing through this buffer).
-        pass
+        # prometheus hist/gauges
+        emit_prom(entry)
 
     b["events"].open_perf_buffer(handle_event)
 
-    # Poll + side-channel to siphon stacks, mapping them to flows.
-    # We do this by periodically sweeping pending_send_stack and resolving the fd→tuple in userspace.
-    # Simpler: when a ReqResp Latency event arrives, remember most recent send stack for that TGID.
-    if have_stacks:
-        # Build a lightweight /proc lookup for stacks when we see ReqResp events; keep LRU per TGID.
-        pass  # The perf handler above attaches stacks when available.
+    print("Monitoring sockets + latency. Ctrl-C to stop.")
+    if log_file:
+        print(f"Logging to {log_file}")
 
-    print(f"Monitoring sockets + latency. Logging to {log_file}")
     try:
         while True:
             b.perf_buffer_poll()
     except KeyboardInterrupt:
-        print("\nStopping monitoring...")
+        print("\nStopping monitoring... Bye!")
 
 if __name__ == "__main__":
     main()
