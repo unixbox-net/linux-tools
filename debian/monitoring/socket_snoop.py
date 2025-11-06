@@ -1,7 +1,45 @@
 #!/usr/bin/env python3
 """
-Socket Snoop - Realtime socket monitoring (IPv4) via eBPF/BCC.
-Requires: bcc & matching kernel headers.
+# Socket Snoop - Realtime Socket Monitoring, @OR(ϵ)SOURCES
+
+## Overview
+
+The Socket Monitoring Tool is a powerful and lightweight solution designed for system administrators who need real-time insights into socket-level network activity on their systems. By leveraging eBPF, this tool provides detailed logs of connection states, including source and destination IP addresses, ports, process IDs (PIDs), and associated commands (COMM), as well as TCP state transitions. Socket_snoop is a poerful addition to tcpdump.
+
+```plaintext
+FEATURES:
+- Captures TCP state changes (inet_sock_set_state tracepoint).
+- Monitors key TCP connection states like SYN_SENT, FIN_WAIT, and TIME_WAIT.
+- Tracks TCP retransmissions (tcp_retransmit_skb tracepoint), a key indicator of network issues.
+- Logs the process ID (PID) and command name (COMM) associated with each connection.
+- Logs connection details (source/destination IP and port, process ID, and state) to /var/log/socket_monitor.log.
+- Skips noisy or invalid entries, like connections with IP 0.0.0.0.
+- Maps TCP states to human-readable descriptions.
+- Formats IP addresses for readability.
+- Uses perf_buffer for real-time event handling.
+- Can run continuously and provide live updates via the console and log file.
+- Real-Time Logging: Captures and logs socket connections as they occur.
+- Detailed Insights: Provides source and destination IP addresses, ports, PIDs, command names, and TCP states.
+- Formatted Output: Logs are time-stamped and categorized (e.g., Opened Connection, Closed Connection, Established Connection).
+- Lightweight and Efficient: Runs efficiently using eBPF without significant performance overhead.
+
+BENEFITS:
+- Simplifies network monitoring by highlighting key details often buried in more complex tools.
+- Reduces the need for deep packet analysis with tools like tcpdump or wireshark.
+- Enhances operational awareness for system administrators managing critical infrastructure.
+
+LIMITATIONS:
+- IP4 only (wip)
+- Need to add Dynamic Filters / pid/ip/ports
+- Enhance Error Handling
+- Perfomance Tuning
+```
+## Use Cases
+
+Security Monitoring: Detect suspicious or unauthorized network activity.
+Performance Debugging: Identify network latency or dropped connections by observing TCP states.
+Audit Logging: Maintain a comprehensive record of all socket-level network interactions.
+Real-Time Monitoring: Observe live network activity without the complexity of tools like tcpdump or wireshark. In addition, no network frames are captured so it's perfect for high security networks.
 """
 
 import argparse
