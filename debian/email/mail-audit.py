@@ -125,7 +125,9 @@ Integration with Pipelines:
   → Parse with jq for automation/CI pipelines
 
 REQUIRES:
-  pip install dnspython requests cryptography pyOpenSSL
+python3 -m pip install --upgrade pip wheel setuptools
+python3 -m pip install dnspython requests cryptography pyOpenSSL
+  
 """
 
 import sys, os, socket, ssl, json, time, re, logging, traceback, threading
