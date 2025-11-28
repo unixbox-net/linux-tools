@@ -1,6 +1,6 @@
 # A few select utils to get you started.
 
-This repository contains a curated set of specialized Linux utilities designed to simplify system administration, security auditing, and troubleshooting. Each tool is lightweight, efficient, and crafted to address specific operational challenges — from normalizing filenames to monitoring sockets, auditing mail systems, diagnosing servers, and analyzing logs.  
+This repository contains a curated set of specialized Linux utilities designed to simplify system administration, security auditing, and troubleshooting. Each tool is lightweight, efficient, and crafted to address specific operational challenges — from normalizing filenames to monitoring sockets, auditing mail systems, diagnosing servers, and analyzing logs.
 
 Every tool has its own dedicated documentation file (`.md`) for detailed usage and instructions. This README provides an overview of each tool with a concise description and highlights of its most powerful features.
 
@@ -8,14 +8,14 @@ Every tool has its own dedicated documentation file (`.md`) for detailed usage a
 
 ## RAL (Rename and Lowercase)
 
-RAL is a high-performance utility written in C for normalizing filenames across directories. It systematically replaces spaces with dots (or another chosen character) and converts all filenames to lowercase, ensuring consistency across diverse file sets. Unlike shell scripts or Python wrappers, RAL is designed to be lightning-fast, capable of handling thousands of files in seconds.  
+RAL is a high-performance utility written in C for normalizing filenames across directories. It systematically replaces spaces with dots (or another chosen character) and converts all filenames to lowercase, ensuring consistency across diverse file sets. Unlike shell scripts or Python wrappers, RAL is designed to be lightning-fast, capable of handling thousands of files in seconds.
 
-This tool is particularly useful in environments where file naming standards are critical—such as media servers, shared directories, or automation pipelines. By automatically detecting and resolving conflicts, RAL avoids errors that can arise from case-sensitive duplicates or messy naming conventions, ensuring predictable and repeatable outcomes.  
+This tool is particularly useful in environments where file naming standards are critical—such as media servers, shared directories, or automation pipelines. By automatically detecting and resolving conflicts, RAL avoids errors that can arise from case-sensitive duplicates or messy naming conventions, ensuring predictable and repeatable outcomes.
 
 **Key Features**
-- Replace spaces in filenames with dots (or custom characters).  
-- Convert all filenames to lowercase automatically.  
-- Recursively process directories with speed and accuracy.  
+- Replace spaces in filenames with dots (or custom characters).
+- Convert all filenames to lowercase automatically.
+- Recursively process directories with speed and accuracy.
 - Safely handle conflicts by overwriting duplicates.
 
 ---
