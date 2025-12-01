@@ -48,7 +48,7 @@ A single, hardened Bash build system that produces UEFI-only, Secure Boot–sign
 
 ---
 
-## Why use foundryBot?
+## Why?
 
 Traditional image builders assemble userland on top of whatever the platform gives you. This builds **from the kernel up**: dracut + ukify + signed UKIs, ZFS root with Boot Environments, Secure Boot keys, TPM2 sealing, and deterministic packages from a darksite.
 
@@ -96,3 +96,28 @@ Modes:
 Key env:
   PROXMOX_HOST=10.x.x.x   ISO_ORIG=/path/debian-13-netinst.iso
   BUILD_ROOT=/root/builds  AWS_S3_BUCKET=my-bucket
+```
+
+## Quick Start
+
+#1 - downalod and deploy proxmox, ssh-copy-id and ensure you can ssh root proxmox (TARGET MACHINE)
+#2 - on your (BUILD MACHINE)
+```bash
+sudo apt-get update && sudo apt-get install -y \
+  git curl ca-certificates \
+  docker.io \
+  debootstrap squashfs-tools xorriso syslinux-common isolinux dosfstools p7zip-full zstd \
+  zfsutils-linux zfs-dkms \
+  qemu-kvm libvirt-daemon-system libvirt-clients bridge-utils ovmf cloud-image-utils \
+  build-essential dkms make gcc \
+  linux-headers-$(uname -r)
+```
+#3 - ./deploy.sh
+
+by default the deploy script will use the public network to pull down and build the entire world, in this case
+13 vm's in a hub&spoke configuration with 3 default built in wireguard l3 tunnels with built in api.
+
+by default, only os, packages, configuraion and keys are generated. allowing for the "Blanks" to be consumed by existing tools. It also 
+allows them to be cleanly intergrated into exsiting wireguard networks simply add the peer and keys.
+
+I have included some sample commands you can use to easily manage your new infracrutre (keep in mind its WIP)
