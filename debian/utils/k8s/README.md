@@ -99,9 +99,8 @@ Key env:
 ```
 
 ## Quick Start
-
-#1 - downalod and deploy proxmox, ssh-copy-id and ensure you can ssh root proxmox (TARGET MACHINE)
-#2 - on your (BUILD MACHINE)
+- downalod and deploy proxmox, ssh-copy-id and ensure you can ssh root proxmox (TARGET MACHINE)
+- on your (BUILD MACHINE)
 ```bash
 sudo apt-get update && sudo apt-get install -y \
   git curl ca-certificates \
@@ -112,7 +111,7 @@ sudo apt-get update && sudo apt-get install -y \
   build-essential dkms make gcc \
   linux-headers-$(uname -r)
 ```
-#3 - ./deploy.sh
+- ./deploy.sh
 
 by default the deploy script will use the public network to pull down and build the entire world, in this case
 13 vm's in a hub&spoke configuration with 3 default built in wireguard l3 tunnels with built in api.
