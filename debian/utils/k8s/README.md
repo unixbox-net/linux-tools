@@ -1,4 +1,4 @@
-# foundryBot — Deployment Construction Kit
+# deploy.sh
 
 > Build once, deploy everywhere — **Proxmox** · **AWS** · **Firecracker** · **Azure/Packer (scaffold)**
 
