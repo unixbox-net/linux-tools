@@ -20,9 +20,12 @@ COPY requirements.txt /app/
 
 # NOTE: --system-site-packages so venv can import 'bcc' (installed system-wide)
 RUN python3 -m venv --system-site-packages /app/.venv && \
+    ln -sf python3 /app/.venv/bin/python && \
     /app/.venv/bin/pip install --upgrade pip && \
     /app/.venv/bin/pip install -r requirements.txt
 
 COPY . /app/
 
-CMD ["/app/.venv/bin/python", "/app/socket_snoop.py"]
+# Use python3 in CMD (safe), but thanks to symlink python also exists
+CMD ["/app/.venv/bin/python3", "/app/socket_snoop.py"]
+

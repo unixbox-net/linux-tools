@@ -14,4 +14,5 @@ exec docker run --rm -it \
   -v /sys:/sys:ro \
   -v /var/log:/var/log \
   socket-snoop:latest \
-  /app/.venv/bin/python /app/socket_snoop.py --log-file /var/log/socket_monitor.log
+  /app/.venv/bin/python3 /app/socket_snoop.py --log-file /var/log/socket_monitor.log
+
