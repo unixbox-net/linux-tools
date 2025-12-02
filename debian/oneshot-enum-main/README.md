@@ -1,12 +1,146 @@
 # oneshot-enum
 
-A **one-shot**, Docker-friendly enumerator with safe automations and clean HTML reporting.
+oneshot-enum is a one-shot, production-grade enumeration pipeline for
+Linux and Windows/Active Directory environments. It performs full-scope
+recon with a single command, combining high‑speed port scanning, HTTP(S)
+probing, rule‑based automation, eBPF socket telemetry, screenshot
+capture, and AI‑ready structured output.
 
-- Targets Linux & Windows/AD
-- No Kali required
-- Professional module layout, single CLI: `oneshot-enum`
-- Default rules embedded; optionally override with your own YAML
-- Generates JSON + HTML report; optional service-specific follow-ups (SMB/LDAP/AD/etc.)
+## Key Features
+
+-   **Single‑command enumeration**
+    -   Run `oneshot-enum <target>` and get ports, services, web
+        discovery, screenshots, and automation outputs.
+-   **Rules‑based automations**
+    -   A YAML rules engine triggers follow‑up actions based on detected
+        ports/services.
+    -   Supports nmap, testssl, nuclei, SMB/LDAP tools, Impacket, custom
+        scripts, and anything else you add.
+-   **AI/LLM‑ready output**
+    -   Clean JSON with normalized fields.
+    -   Logs, artifacts, screenshots, and results stored in structured
+        directories.
+    -   Perfect for automated triage, summarization, or risk analysis
+        via LLMs.
+-   **eBPF-powered runtime telemetry**
+    -   The `socketsnoop` module uses BCC/eBPF to monitor live socket
+        events.
+    -   Outputs structured JSON for anomaly detection or deep workflow
+        analysis.
+-   **Screenshot pipeline**
+    -   Web URL discovery + screenshot capture via the `webshot`
+        service.
+    -   Reports embed screenshots directly into the HTML report.
+-   **Log screening & diagnostics**
+    -   `loghog` for ultra-fast log triage, IOC pattern matching, regex
+        hunts, and extraction.
+    -   Container and system log collectors for automated audits.
+-   **Docker-native architecture**
+    -   Scanner, screenshot engine, reporter, eBPF tools, MinIO, and
+        Postgres run independently.
+    -   Works locally or fully automated inside CI/CD pipelines.
+
+## High-Level Workflow
+
+1.  **Scan target**
+
+        oneshot-enum <target> --full --automate --out out.json --report-html report.html
+
+2.  **Discover**
+
+    -   Open ports & services\
+    -   Web endpoints & redirects\
+    -   TLS details & tech stack fingerprints\
+    -   Active Directory ports (SMB/LDAP/Kerberos/WinRM)
+
+3.  **Automate**
+
+    -   Trigger rules that call external tools (nmap, testssl, nuclei,
+        smbclient, enum4linux-ng, etc.)
+    -   Save all results under `out/actions/`
+
+4.  **Capture**
+
+    -   Generate URLs\
+    -   Screenshot all endpoints\
+    -   Store as structured evidence
+
+5.  **Report**
+
+    -   Produce `out/report.html`
+    -   Produce AI-friendly `out.json`
+
+## Automation Rules
+
+Rules are written in YAML and define:
+
+-   `match` -- ports/services to trigger on\
+-   `set` -- environment variables injected into actions\
+-   `actions` -- commands to run
+
+Example rule:
+
+``` yaml
+- match:
+    ports: [443]
+  set:
+    scheme: "https"
+  actions:
+    - name: testssl
+      require: ["testssl.sh"]
+      run: |
+        testssl.sh ${SCHEME}://${HOST}:${PORT} > ${OUT}/tls.txt 2>&1
+```
+
+## eBPF Socket Telemetry
+
+`socketsnoop` monitors:
+
+-   Connection attempts\
+-   State transitions\
+-   Source/destination IPs\
+-   Ports\
+-   Timing
+
+Outputs JSON‑lines suitable for:
+
+-   Grafana/Loki ingestion\
+-   Forensic analysis\
+-   LLM workflows ("explain anomalous behavior", "summarize flows")
+
+## Loghog: Log Screening Engine
+
+`loghog` provides:
+
+-   Regex/IOC pattern matching\
+-   URL/IP extraction\
+-   Context-aware log traversal\
+-   High-speed filtering
+
+Great for post-scan triage or feeding logs to an AI summarizer.
+
+## Installation (Python)
+
+    python3 -m venv .venv
+    source .venv/bin/activate
+    pip install -e .
+    oneshot-enum --help
+
+## Installation (Docker)
+
+    docker build -t oneshot-enum .
+    ./max_scan.sh <target>
+
+## Summary
+
+oneshot-enum is designed for serious operators who need **maximum
+discovery with minimal commands**.\
+It combines classic recon, modern automation, eBPF visibility,
+structured reporting, and AI‑ready data into a single cohesive
+toolchain.
+
+Use it for: - Automated recon - Pentest preparation - Continuous asset
+monitoring - CI/CD exposure scanning - AI-assisted analysis
 
 ## Quick start (Docker)
 
