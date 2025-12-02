@@ -1,0 +1,28 @@
+server:
+  http_listen_port: 9080
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: actions
+    static_configs:
+      - targets: [localhost]
+        labels:
+          job: actions
+          __path__: /out/actions/**/stdout.log
+
+  - job_name: ebpf
+    static_configs:
+      - targets: [localhost]
+        labels:
+          job: ebpf
+          __path__: /out/bpf/*.jsonl
+
+  - job_name: scanner-summary
+    static_configs:
+      - targets: [localhost]
+        labels:
+          job: scanner
+          __path__: /out/out.json
+

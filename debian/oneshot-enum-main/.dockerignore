@@ -1,0 +1,12 @@
+.git
+out
+.venv
+venv
+__pycache__
+node_modules
+*.iso
+*.img
+*.qcow2
+*.tar*
+*.zip
+*.7z

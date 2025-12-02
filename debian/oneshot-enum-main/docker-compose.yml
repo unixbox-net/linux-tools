@@ -1,0 +1,198 @@
+name: oneshot-enum
+
+x-env-db: &db_env
+  POSTGRES_USER: postgres
+  POSTGRES_PASSWORD: postgres
+  POSTGRES_DB: oneshot
+
+# MinIO server (root creds) — used by the MinIO container and the init job
+x-minio-root: &minio_root
+  MINIO_ROOT_USER: minioadmin
+  MINIO_ROOT_PASSWORD: minioadmin
+
+# MinIO client creds — used by the ingestor app code
+x-minio-client: &minio_client
+  MINIO_ACCESS_KEY: minioadmin
+  MINIO_SECRET_KEY: minioadmin
+  MINIO_ENDPOINT: minio:9000
+  MINIO_BUCKET: oneshot-artifacts
+  MINIO_SCHEME: http
+
+services:
+  postgres:
+    image: postgres:15
+    environment: *db_env
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB || exit 1"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  minio:
+    image: minio/minio:latest
+    environment: *minio_root
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sS http://127.0.0.1:9000/minio/health/ready >/dev/null || exit 1"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+
+  # One-shot bucket bootstrap; exits 0 when done
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment: *minio_root
+    entrypoint: ["/bin/sh","-c"]
+    command: >
+      '
+      set -e
+      mc alias set minio http://minio:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD}
+      mc mb -p minio/oneshot-artifacts || true
+      mc anonymous set download minio/oneshot-artifacts || true
+      echo "OK"
+      '
+
+  # Capture ONLY Docker container logs (this project) from /var/lib/docker/containers
+  loghog:
+    build: ./loghog
+    image: oneshot-enum-loghog
+    environment:
+      DURATION_SEC: "${DURATION_SEC:-60}"
+      # Use your compose project name if COMPOSE_PROJECT_NAME is not exported
+      PROJECT_NAME: "${COMPOSE_PROJECT_NAME:-oneshot-enum}"
+    volumes:
+      - ./out/loghog:/out/loghog
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    command: ["/entrypoint.sh"]
+
+  # eBPF socket capture (best-effort); exits after duration
+
+  socketsnoop:
+    build: ./socketsnoop
+    image: oneshot-enum-socketsnoop
+    privileged: true
+    pid: "host"
+    environment:
+      DURATION_SEC: "${DURATION_SEC:-60}"
+    volumes:
+      - ./out/bpf:/out/bpf
+      - /lib/modules:/lib/modules:ro
+      - /usr/src:/usr/src:ro
+      - /sys:/sys:ro
+      - /sys/kernel/debug:/sys/kernel/debug
+    entrypoint:
+      - bash
+      - -lc
+      - |
+        mkdir -p /out/bpf
+        python /app/socketsnoop.py \
+          --out /out/bpf/socketsnoop.jsonl \
+          --duration ${DURATION_SEC:-60} \
+          2> /out/bpf/error.log \
+        || { echo 'ebpf failed' > /out/bpf/unsupported.txt; ss -Htanp > /out/bpf/ss.txt || true; }
+
+  # SCANNER — writes results into /out
+
+  oneshot-scanner:
+    build: ./scanner
+    environment:
+      TARGET: "${TARGET}"
+#      NUCLEI_ARGS: "-severity high,critical -c 50 -rl 100 -retries 0 -timeout 10s"
+#      HTTPX_ARGS: "-follow-redirects -timeout 10 -retry 1"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    volumes:
+      - ./out:/out
+
+  # URL generator -> /out/urls.txt
+  urlgen:
+    build: ./urlgen
+    depends_on:
+      oneshot-scanner:
+        condition: service_completed_successfully
+    volumes:
+      - ./out:/out
+    command: ["python","/app/urlgen.py","/out/out.json","/out/urls.txt"]
+
+  # Web screenshots using gowitness (runs AFTER urlgen)
+  webshot:
+    build: ./webshot
+    depends_on:
+      urlgen:
+        condition: service_completed_successfully
+    working_dir: /work
+    volumes:
+      - ./out:/out
+    entrypoint:
+      - bash
+      - -lc
+      - |
+        set -euo pipefail
+        if [ -s /out/urls.txt ]; then
+          echo "[webshot] taking screenshots from /out/urls.txt ..."
+          gowitness scan file \
+            -f /out/urls.txt \
+            -s /out/shots \
+            --driver chromedp \
+            --chrome-path /usr/bin/chromium \
+            --screenshot-format png \
+            -T 30 --delay 1 -q || true
+        else
+          echo "[webshot] no URLs in /out/urls.txt"
+        fi
+
+  # INGESTOR — inserts rows in Postgres, uploads artifacts to MinIO
+  oneshot-ingestor:
+    build: ./ingestor
+    image: oneshot-enum-oneshot-ingestor
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      oneshot-scanner:
+        condition: service_completed_successfully
+      urlgen:
+        condition: service_completed_successfully
+      webshot:
+        condition: service_completed_successfully
+      loghog:
+        condition: service_completed_successfully
+      socketsnoop:
+        condition: service_completed_successfully
+    environment:
+      PGHOST: postgres
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: oneshot
+      OUT_DIR: /out
+      <<: *minio_client
+    volumes:
+      - ./out:/out
+
+  # REPORTER — reads /out and DB, writes consolidated HTML to /reports
+  oneshot-reporter:
+    build: ./reporter
+    depends_on:
+      oneshot-ingestor:
+        condition: service_completed_successfully
+    volumes:
+      - ./out:/out
+      - ./reports:/reports
+    command: ["python","/app/report.py","--in","/out/out.json","--html","/reports/${TARGET}-oneshot-report.html"]
+
+volumes:
+  db-data:
+  minio-data:
+

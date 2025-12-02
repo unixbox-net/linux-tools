@@ -1,0 +1,8 @@
+# send nothing by default
+*
+
+# but include these
+!Dockerfile
+!oneshot.sh
+!entrypoint.sh
+

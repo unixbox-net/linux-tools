@@ -1,0 +1,390 @@
+version: 1
+defaults:
+  timeout: 900
+
+rules:
+  # -------------------- Web (HTTPS) --------------------
+  - match: { ports: [443, 4443, 8443, 9443] }
+    set: { service: "https", scheme: "https" }
+    actions:
+      - name: testssl
+        require: ["testssl.sh"]
+        out_dir_tag: "tls"
+        run: |
+          testssl.sh --parallel --sneaky --warnings batch "${SCHEME}://${HOST}:${PORT}" > "${OUT}/testssl.txt" 2>&1 || true
+      - name: nuclei-tls
+        require: ["nuclei"]
+        out_dir_tag: "nuclei"
+        run: |
+          nuclei -u "${SCHEME}://${HOST}:${PORT}" -tags tls,ssl -duc -json -o "${OUT}/nuclei.json" || true
+      - name: headers
+        require: ["curl"]
+        out_dir_tag: "http"
+        run: |
+          curl -k -sS -I "${SCHEME}://${HOST}:${PORT}" > "${OUT}/headers.txt" 2>&1 || true
+
+  # -------------------- Web (HTTP-ish) --------------------
+  - match: { ports: [80, 81, 88, 3000, 5000, 5601, 8000, 8008, 8010, 8080, 8081, 8088, 8181, 8888, 9000, 9200, 9443] }
+    set: { service: "http", scheme: "http" }
+    actions:
+      - name: whatweb
+        require: ["whatweb"]
+        run: |
+          whatweb --color=never "${SCHEME}://${HOST}:${PORT}" --log-verbose="${OUT}/whatweb.log" || true
+      - name: ffuf-common
+        require: ["ffuf"]
+        run: |
+          ffuf -mc all -fc 404 -ac -t 80 -w /usr/share/wordlists/dirb/common.txt \
+               -u "${SCHEME}://${HOST}:${PORT}/FUZZ" -of json -o "${OUT}/ffuf.json" || true
+      - name: wafw00f
+        require: ["wafw00f"]
+        run: |
+          wafw00f -a "${SCHEME}://${HOST}:${PORT}" > "${OUT}/wafw00f.txt" 2>&1 || true
+
+  # -------------------- Windows / AD Core --------------------
+  # SMB / NetBIOS
+  - match: { ports: [445] }
+    set: { service: "smb" }
+    actions:
+      - name: smbclient-list
+        require: ["smbclient"]
+        run: |
+          smbclient -L "//${HOST}/" -N > "${OUT}/smbclient_list.txt" 2>&1 || true
+      - name: smb-os-discovery
+        require: ["nmap"]
+        run: |
+          nmap -Pn -p445 --script=smb-os-discovery,smb2-security-mode,smb2-time "${HOST}" -oN "${OUT}/nmap_smb.txt" || true
+      - name: smbmap-anon
+        require: ["smbmap"]
+        run: |
+          smbmap -H "${HOST}" -u "" -p "" > "${OUT}/smbmap.txt" 2>&1 || true
+      - name: enum4linux-ng
+        require: ["enum4linux-ng"]
+        run: |
+          enum4linux-ng -A -r 1 -oJ "${OUT}/e4l.json" "${HOST}" || true
+
+      # NEW: GPP cpassword check (read-only)
+      - name: gpp-cpassword
+        require: ["smbclient"]
+        when: "AD_DOMAIN"
+        run: |
+          # Try anonymous; if fails, try creds if present
+          (
+            smbclient "//${HOST}/SYSVOL" -N -c 'recurse ON; prompt OFF; lcd "${OUT}"; mget */Policies/*/User/Preferences/Groups/Groups.xml' \
+            || ( [ -n "${AD_USER:-}" ] && smbclient "//${HOST}/SYSVOL" -U "${AD_DOMAIN}\\${AD_USER}%${AD_PASS}" -c 'recurse ON; prompt OFF; lcd "${OUT}"; mget */Policies/*/User/Preferences/Groups/Groups.xml' )
+          ) || true
+
+  - match: { ports: [137,138,139] }
+    set: { service: "netbios" }
+    actions:
+      - name: nmblookup
+        require: ["nmblookup"]
+        run: |
+          nmblookup -A "${HOST}" > "${OUT}/nmblookup.txt" 2>&1 || true
+      - name: nbtscan
+        require: ["nbtscan"]
+        run: |
+          nbtscan -v "${HOST}" > "${OUT}/nbtscan.txt" 2>&1 || true
+
+  # RPC Endpoint Mapper
+  - match: { ports: [135] }
+    set: { service: "epmapper" }
+    actions:
+      - name: impacket-rpcdump
+        require: ["rpcdump.py"]
+        run: |
+          rpcdump.py "${HOST}" > "${OUT}/rpcdump.txt" 2>&1 || true
+
+  # LDAP / LDAPS / Global Catalog
+  - match: { ports: [389] }
+    set: { service: "ldap" }
+    actions:
+      - name: ldap-anon-rootdse
+        require: ["ldapsearch"]
+        run: |
+          ldapsearch -x -H "ldap://${HOST}:${PORT}" -s base -b "" namingcontexts rootDomainNamingContext defaultNamingContext > "${OUT}/rootdse.txt" 2>&1 || true
+      - name: nmap-ldap
+        require: ["nmap"]
+        run: |
+          nmap -Pn -p389 --script=ldap-rootdse,ldap-search "${HOST}" -oN "${OUT}/nmap_ldap.txt" || true
+
+      # NEW: ldapdomaindump (full domain inventory)
+      - name: ldapdomaindump
+        require: ["ldapdomaindump"]
+        when: "(AD_USER and AD_PASS and AD_DOMAIN) or KRB5CCNAME"
+        run: |
+          ldapdomaindump --authtype NTLM --user "${AD_DOMAIN}\\${AD_USER}" --password "${AD_PASS}" --dc-ip "${HOST}" -o "${OUT}" > "${OUT}/ldapdomaindump.log" 2>&1 || true
+
+      # NEW: findDelegation (delegation paths)
+      - name: impacket-findDelegation
+        require: ["findDelegation.py"]
+        when: "(AD_USER and AD_PASS and AD_DOMAIN) or KRB5CCNAME"
+        run: |
+          findDelegation.py "${AD_DOMAIN}/${AD_USER}:${AD_PASS}" -dc-ip "${HOST}" > "${OUT}/findDelegation.txt" 2>&1 || true
+
+  - match: { ports: [636] }
+    set: { service: "ldaps" }
+    actions:
+      - name: ldaps-rootdse
+        require: ["ldapsearch", "openssl"]
+        run: |
+          ldapsearch -x -H "ldaps://${HOST}:${PORT}" -s base -b "" namingcontexts > "${OUT}/rootdse.txt" 2>&1 || true
+          echo | openssl s_client -connect "${HOST}:${PORT}" -servername "${HOST}" -showcerts > "${OUT}/tls.txt" 2>&1 || true
+
+  - match: { ports: [3268, 3269] }
+    set: { service: "gc" }
+    actions:
+      - name: ldap-gc-rootdse
+        require: ["ldapsearch"]
+        run: |
+          PROTO="$([ "${PORT}" = "3269" ] && echo "ldaps" || echo "ldap")"
+          ldapsearch -x -H "${PROTO}://${HOST}:${PORT}" -s base -b "" namingcontexts > "${OUT}/gc_rootdse.txt" 2>&1 || true
+
+  # Kerberos / Kpasswd
+  - match: { ports: [88, 464] }
+    set: { service: "kerberos" }
+    actions:
+      - name: nmap-krb-info
+        require: ["nmap"]
+        run: |
+          nmap -Pn -p88 --script krb5-enum-users -sV "${HOST}" -oN "${OUT}/nmap_kerberos.txt" || true
+
+      # existing AS-REP roast
+      - name: impacket-GetNPUsers
+        require: ["GetNPUsers.py"]
+        when: "ALLOW_ROAST == '1' and AD_DOMAIN"
+        run: |
+          GetNPUsers.py "${AD_DOMAIN}/" -dc-ip "${HOST}" -format hashcat -usersfile "${OUT}/users.txt" > "${OUT}/asrep_roast.txt" 2>&1 || true
+
+      # NEW: Kerberoast (SPN roast)
+      - name: impacket-GetUserSPNs
+        require: ["GetUserSPNs.py"]
+        when: "ALLOW_ROAST == '1' and AD_DOMAIN and ((AD_USER and AD_PASS) or KRB5CCNAME)"
+        run: |
+          GetUserSPNs.py -request -dc-ip "${HOST}" "${AD_DOMAIN}/${AD_USER}:${AD_PASS}" -outputfile "${OUT}/kerberoast.hashes" > "${OUT}/kerberoast.log" 2>&1 || true
+
+  # WinRM
+  - match: { ports: [5985, 5986] }
+    set: { service: "winrm" }
+    actions:
+      - name: winrm-headers
+        require: ["curl"]
+        run: |
+          curl -sSk "http${PORT==5986 and 's' or ''}://${HOST}:${PORT}/wsman" -I > "${OUT}/headers.txt" 2>&1 || true
+
+  # RDP
+  - match: { ports: [3389] }
+    set: { service: "rdp" }
+    actions:
+      - name: rdpscan
+        require: ["rdpscan"]
+        run: |
+          rdpscan --json "${HOST}:${PORT}" > "${OUT}/rdpscan.json" 2>&1 || true
+      - name: nmap-rdp
+        require: ["nmap"]
+        run: |
+          nmap -Pn -p3389 --script rdp-enum-encryption,rdp-ntlm-info "${HOST}" -oN "${OUT}/nmap_rdp.txt" || true
+
+  # DCOM / RPC over HTTP
+  - match: { ports: [593] }
+    set: { service: "dcom" }
+    actions:
+      - name: nmap-dcerpc
+        require: ["nmap"]
+        run: |
+          nmap -Pn -p593 --script dcerpc-enum "${HOST}" -oN "${OUT}/nmap_dcom.txt" || true
+
+  # AD CS / Web Enrollment
+  - match: { ports: [80, 443] }
+    set: { service: "http" }
+    actions:
+      - name: certipy-find
+        require: ["certipy"]
+        when: "(AD_USER and AD_PASS and AD_DOMAIN) or KRB5CCNAME"
+        run: |
+          certipy find -vulnerable -u "${AD_USER}@${AD_DOMAIN}" -p "${AD_PASS}" -dc-ip "${HOST}" -stdout > "${OUT}/certipy_find.txt" 2>&1 || true
+
+      # NEW: certipy CA & templates (enumeration only)
+      - name: certipy-ca-templates
+        require: ["certipy"]
+        when: "(AD_USER and AD_PASS and AD_DOMAIN) or KRB5CCNAME"
+        run: |
+          certipy ca -u "${AD_USER}@${AD_DOMAIN}" -p "${AD_PASS}" -dc-ip "${HOST}" -stdout > "${OUT}/certipy_ca.txt" 2>&1 || true
+          certipy template -u "${AD_USER}@${AD_DOMAIN}" -p "${AD_PASS}" -dc-ip "${HOST}" -stdout > "${OUT}/certipy_templates.txt" 2>&1 || true
+
+  # BloodHound (collection)
+  - match: { ports: [389, 445] }
+    set: { service: "ad" }
+    actions:
+      - name: bloodhound-python-All
+        require: ["bloodhound-python"]
+        when: "(AD_USER and AD_PASS and AD_DOMAIN) or KRB5CCNAME"
+        run: |
+          bloodhound-python -d "${AD_DOMAIN}" -u "${AD_USER}" -p "${AD_PASS}" -dc "${HOST}" -c All --zip -o "${OUT}" > "${OUT}/bloodhound.log" 2>&1 || true
+
+  # -------------------- Linux / Infra common --------------------
+  - match: { ports: [22] }
+    set: { service: "ssh" }
+    actions:
+      - name: ssh-audit
+        require: ["ssh-audit"]
+        run: |
+          ssh-audit -n "${HOST}:${PORT}" > "${OUT}/ssh-audit.txt" 2>&1 || true
+      - name: nmap-ssh
+        require: ["nmap"]
+        run: |
+          nmap -Pn -p22 --script ssh2-enum-algos,ssh-hostkey "${HOST}" -oN "${OUT}/nmap_ssh.txt" || true
+
+  - match: { ports: [21] }
+    set: { service: "ftp" }
+    actions:
+      - name: nmap-ftp
+        require: ["nmap"]
+        run: |
+          nmap -Pn -p21 --script=ftp-anon,ftp-syst "${HOST}" -oN "${OUT}/nmap_ftp.txt" || true
+
+  - match: { ports: [25, 587, 2525] }
+    set: { service: "smtp" }
+    actions:
+      - name: smtp-starttls
+        require: ["openssl"]
+        run: |
+          timeout 8 bash -lc 'echo -e "EHLO example.com\r\nQUIT\r\n" | openssl s_client -crlf -starttls smtp -connect "${HOST}:${PORT}" -ign_eof' > "${OUT}/starttls.txt" 2>&1 || true
+
+  - match: { ports: [110, 995] }
+    set: { service: "pop3" }
+    actions:
+      - name: pop3s-peek
+        require: ["openssl"]
+        run: |
+          echo | openssl s_client -connect "${HOST}:${PORT}" -brief > "${OUT}/tls.txt" 2>&1 || true
+
+  - match: { ports: [143, 993] }
+    set: { service: "imap" }
+    actions:
+      - name: imaps-peek
+        require: ["openssl"]
+        run: |
+          echo | openssl s_client -connect "${HOST}:${PORT}" -brief > "${OUT}/tls.txt" 2>&1 || true
+
+  - match: { ports: [53] }
+    set: { service: "dns" }
+    actions:
+      # NEW: AXFR attempt (safe)
+      - name: dig-axfr
+        require: ["dig"]
+        run: |
+          # Try AXFR against likely zone names based on host input; harmless if refused
+          for Z in "${HOST}" "$(echo "${HOST}" | sed 's/^[^.]*\.//')" ; do
+            [ -n "$Z" ] || continue
+            dig @"${HOST}" AXFR "$Z" +time=4 +tries=1 > "${OUT}/axfr_${Z}.txt" 2>&1 || true
+          done
+
+  - match: { ports: [161] }
+    set: { service: "snmp" }
+    actions:
+      # NEW: best-effort public community walk (read-only)
+      - name: snmpwalk-public
+        require: ["snmpwalk"]
+        run: |
+          snmpwalk -v2c -c public -t 2 -r 1 "${HOST}" 1.3.6.1.2.1 > "${OUT}/snmp_public.txt" 2>&1 || true
+
+  - match: { ports: [2049] }
+    set: { service: "nfs" }
+    actions:
+      - name: showmount
+        require: ["showmount"]
+        run: |
+          showmount -e "${HOST}" > "${OUT}/exports.txt" 2>&1 || true
+      - name: nmap-nfs
+        require: ["nmap"]
+        run: |
+          nmap -Pn -p2049 --script nfs-showmount,nfs-ls "${HOST}" -oN "${OUT}/nmap_nfs.txt" || true
+
+  - match: { ports: [2375, 2376] }
+    set: { service: "docker" }
+    actions:
+      - name: docker-info
+        require: ["curl"]
+        run: |
+          PROTO="$([ "${PORT}" = "2376" ] && echo "https" || echo "http")"
+          curl -sSk "${PROTO}://${HOST}:${PORT}/info" > "${OUT}/info.json" 2>&1 || true
+
+  - match: { ports: [2379, 2380] }
+    set: { service: "etcd" }
+    actions:
+      - name: etcd-version
+        require: ["curl"]
+        run: |
+          curl -sS "http://${HOST}:${PORT}/version" > "${OUT}/version.json" 2>&1 || true
+
+  - match: { ports: [6443] }
+    set: { service: "kubernetes" }
+    actions:
+      - name: kube-version
+        require: ["curl"]
+        run: |
+          curl -sSk "https://${HOST}:${PORT}/version" > "${OUT}/version.json" 2>&1 || true
+
+  - match: { ports: [5432] }
+    set: { service: "postgres" }
+    actions:
+      - name: nmap-pg
+        require: ["nmap"]
+        run: |
+          nmap -Pn -p5432 --script=pgsql-version "${HOST}" -oN "${OUT}/nmap_pg.txt" || true
+
+  - match: { ports: [3306] }
+    set: { service: "mysql" }
+    actions:
+      - name: mysql-starttls
+        require: ["openssl"]
+        run: |
+          timeout 5 bash -lc 'echo | openssl s_client -starttls mysql -connect "${HOST}:${PORT}"' > "${OUT}/starttls.txt" 2>&1 || true
+
+  - match: { ports: [1433] }        # NEW: MSSQL
+    set: { service: "mssql" }
+    actions:
+      - name: nmap-mssql
+        require: ["nmap"]
+        run: |
+          nmap -Pn -p1433 --script ms-sql-info,ms-sql-ntlm-info "${HOST}" -oN "${OUT}/nmap_mssql.txt" || true
+
+  - match: { ports: [27017] }
+    set: { service: "mongodb" }
+    actions:
+      - name: nmap-mongo
+        require: ["nmap"]
+        run: |
+          nmap -Pn -p27017 --script mongodb-info "${HOST}" -oN "${OUT}/nmap_mongo.txt" || true
+
+  - match: { ports: [11211] }
+    set: { service: "memcached" }
+    actions:
+      - name: memcached-stats
+        run: |
+          bash -lc 'exec 3<>/dev/tcp/${HOST}/${PORT}; echo -en "stats\r\n" >&3; head -c 512 <&3 > "${OUT}/stats.txt" || true'
+
+  - match: { ports: [6379] }
+    set: { service: "redis" }
+    actions:
+      - name: redis-ping
+        run: |
+          bash -lc 'exec 3<>/dev/tcp/${HOST}/${PORT}; echo -en "*1\r\n$4\r\nPING\r\n" >&3; head -c 64 <&3 > "${OUT}/reply.bin" || true'
+
+  - match: { ports: [9200] }
+    set: { service: "elasticsearch", scheme: "http" }
+    actions:
+      - name: es-info
+        require: ["curl"]
+        run: |
+          curl -sS "${SCHEME}://${HOST}:${PORT}/" > "${OUT}/root.json" || true
+
+  # NEW: VNC best-effort
+  - match: { ports: [5900, 5901] }
+    set: { service: "vnc" }
+    actions:
+      - name: nmap-vnc
+        require: ["nmap"]
+        run: |
+          nmap -Pn -p${PORT} --script vnc-info "${HOST}" -oN "${OUT}/nmap_vnc.txt" || true

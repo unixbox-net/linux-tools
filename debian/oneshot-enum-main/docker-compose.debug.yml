@@ -1,0 +1,103 @@
+name: oneshot-enum-debug
+
+x-logopts: &logopts
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "3"
+
+services:
+  # --- Core infra (just keep more logs) ---
+  postgres:
+    logging: *logopts
+
+  minio:
+    logging: *logopts
+
+  minio-init:
+    logging: *logopts
+
+  # --- Observers ---
+  loghog:
+    logging: *logopts
+    environment:
+      DEBUG: "1"
+      DURATION_SEC: "${DURATION_SEC:-60}"
+      # ensure immediate flush
+      PYTHONUNBUFFERED: "1"
+    # make shell verbose
+    entrypoint: ["/bin/bash","-lc"]
+    command: |
+      set -euxo pipefail
+      /entrypoint.sh
+
+  socketsnoop:
+    logging: *logopts
+    privileged: true
+    pid: "host"
+    security_opt:
+      - apparmor:unconfined
+    environment:
+      DURATION_SEC: "${DURATION_SEC:-60}"
+      PYTHONUNBUFFERED: "1"
+    # OVERRIDE the image ENTRYPOINT so our script runs in bash (fixes the arg issue you saw)
+    entrypoint: ["/bin/bash","-lc"]
+    command: |
+      set -euxo pipefail
+      mkdir -p /out/bpf
+      python /app/socketsnoop.py \
+        --out /out/bpf/socketsnoop.jsonl \
+        --duration ${DURATION_SEC:-60} \
+        2> /out/bpf/error.log \
+      || { echo 'ebpf failed' > /out/bpf/unsupported.txt; ss -Htanp > /out/bpf/ss.txt || true; }
+
+  # --- Scanner & pipeline ---
+  oneshot-scanner:
+    logging: *logopts
+    environment:
+      PYTHONUNBUFFERED: "1"
+      SCANNER_TRACE: "1"         # oneshot.sh can `set -x` if it checks this; otherwise harmless
+      # make the tool runs noisy & bounded-time
+      HTTPX_ARGS: "-follow-redirects -status-code -title -tech-detect -tls-probe -json -v -rate-limit 50 -timeout 10"
+      NUCLEI_ARGS: "-severity low,medium,high,critical -stats -stats-json -vv -debug-req -debug-resp -c 50 -rl 100 -timeout 15s -retries 0"
+      NMAP_ARGS: "-Pn -vv --reason"
+      TESTSSL_FLAGS: "-p -S -s -U -W 3 --openssl-timeout 2"
+
+  urlgen:
+    logging: *logopts
+    environment:
+      PYTHONUNBUFFERED: "1"
+
+  webshot:
+    logging: *logopts
+    environment:
+      PYTHONUNBUFFERED: "1"
+      GOWITNESS_LOGLEVEL: "debug"
+    entrypoint: ["/bin/bash","-lc"]
+    command: |
+      set -euxo pipefail
+      if [ -s /out/urls.txt ]; then
+        echo "[webshot] taking screenshots from /out/urls.txt ..."
+        gowitness scan file \
+          -f /out/urls.txt \
+          -s /out/shots \
+          --driver chromedp \
+          --chrome-path /usr/bin/chromium \
+          --screenshot-format png \
+          -T 30 --delay 1 -v || true
+      else
+        echo "[webshot] no URLs in /out/urls.txt"
+      fi
+
+  oneshot-ingestor:
+    logging: *logopts
+    environment:
+      PYTHONUNBUFFERED: "1"
+      LOG_LEVEL: "DEBUG"
+
+  oneshot-reporter:
+    logging: *logopts
+    environment:
+      PYTHONUNBUFFERED: "1"
+      LOG_LEVEL: "DEBUG"
+
