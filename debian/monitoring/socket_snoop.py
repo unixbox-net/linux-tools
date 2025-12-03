@@ -41,15 +41,20 @@ Performance Debugging: Identify network latency or dropped connections by observ
 Audit Logging: Maintain a comprehensive record of all socket-level network interactions.
 Real-Time Monitoring: Observe live network activity without the complexity of tools like tcpdump or wireshark. In addition, no network frames are captured so it's perfect for high security networks.
 """
-
 import argparse
 import hashlib
 import os
 import sys
 from datetime import datetime
 from collections import deque
+from typing import Dict, Any, List, Optional
 
-def parse_args():
+
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
+
+def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Enhanced Socket Monitoring Script")
     p.add_argument("--pid", type=int, default=None, help="Filter by PID")
     p.add_argument("--src-ip", type=str, default=None, help="Filter by source IPv4")
@@ -57,10 +62,32 @@ def parse_args():
     p.add_argument("--src-port", type=int, default=None, help="Filter by source port")
     p.add_argument("--dst-port", type=int, default=None, help="Filter by destination port")
     p.add_argument("--active-only", action="store_true", help="Only established connections")
-    p.add_argument("--log-file", default=os.environ.get("SOCKET_SNOOP_LOG", "/var/log/socket_monitor.log"))
+    p.add_argument(
+        "--log-file",
+        default=os.environ.get("SOCKET_SNOOP_LOG", "/var/log/socket_monitor.log"),
+        help="Log file path (default: /var/log/socket_monitor.log or $SOCKET_SNOOP_LOG)",
+    )
     return p.parse_args()
 
+
+# ---------------------------------------------------------------------------
+# BPF program
+# ---------------------------------------------------------------------------
+
 BPF_PROGRAM = r"""
+// Compatibility shims for mixed header sets (e.g. new kernel + older userspace)
+// Some kernels/userspace combos reference BPF_LOAD_ACQ / BPF_STORE_REL in
+// include/linux/bpf.h but older uapi headers do not define them, causing
+// "use of undeclared identifier" errors. Defining them here is harmless for
+// our program and keeps compilation portable.
+#ifndef BPF_LOAD_ACQ
+#define BPF_LOAD_ACQ 0x85
+#endif
+
+#ifndef BPF_STORE_REL
+#define BPF_STORE_REL 0xa5
+#endif
+
 #include <uapi/linux/ptrace.h>
 #include <uapi/linux/in.h>
 #include <linux/tcp.h>
@@ -79,9 +106,13 @@ struct data_t {
     char event[16];
     u32 uid;
 };
+
 BPF_PERF_OUTPUT(events);
 
-TRACEPOINT_PROBE(sock, inet_sock_set_state) {
+// Tracepoint: sock:inet_sock_set_state
+// This fires on TCP state transitions.
+TRACEPOINT_PROBE(sock, inet_sock_set_state)
+{
     if (args->family != AF_INET)
         return 0;
 
@@ -99,7 +130,10 @@ TRACEPOINT_PROBE(sock, inet_sock_set_state) {
     }
     data.ppid = ppid;
 
-    // Debian 13 (BCC 0.31) uses __u8[4] for saddr/daddr in this tracepoint
+    // Many modern kernels (and Debian 13 / BCC 0.31) use __u8[4] for
+    // saddr/daddr in this tracepoint.
+    //
+    // We treat args->saddr / args->daddr as byte arrays and pack into u32.
     data.src_ip = ((u32)args->saddr[0] << 24) |
                   ((u32)args->saddr[1] << 16) |
                   ((u32)args->saddr[2] <<  8) |
@@ -119,7 +153,8 @@ TRACEPOINT_PROBE(sock, inet_sock_set_state) {
 }
 """
 
-TCP_STATES = {
+
+TCP_STATES: Dict[int, str] = {
     1: "Connection Established",
     2: "Connection Opening (SYN_SENT)",
     3: "Connection Opening (SYN_RECV)",
@@ -133,40 +168,112 @@ TCP_STATES = {
     11: "Connection Closing (CLOSING)",
 }
 
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
 def format_ip(ip_u32: int) -> str:
     return ".".join(str((ip_u32 >> s) & 0xFF) for s in (24, 16, 8, 0))
 
-def connection_id(src_ip, src_port, dst_ip, dst_port) -> str:
-    unique = f"{src_ip}:{src_port}->{dst_ip}:{dst_port}"
-    return hashlib.md5(unique.encode()).hexdigest()
 
-def main():
+def connection_id(src_ip: str, src_port: int, dst_ip: str, dst_port: int) -> str:
+    unique = f"{src_ip}:{src_port}->{dst_ip}:{dst_port}"
+    return hashlib.md5(unique.encode(), usedforsecurity=False).hexdigest()
+
+
+def resolve_kernel_include_cflags() -> List[str]:
+    """
+    Build a list of -I cflags pointing at the *host* kernel headers.
+
+    This is especially important when running in a container with:
+      - /lib/modules mounted from the host
+      - userspace headers from a different distro (e.g. Debian in container,
+        Fedora on host) that might be out of sync.
+
+    We prefer the host kernel's own source tree, if present.
+    """
+    cflags: List[str] = []
+
+    # Inside container but using host kernel
+    rel = os.uname().release
+    candidates = [
+        f"/lib/modules/{rel}/build",
+        f"/lib/modules/{rel}/source",
+    ]
+
+    for base in candidates:
+        if not os.path.isdir(base):
+            continue
+        for inc in ("include", "include/uapi", "include/generated"):
+            path = os.path.join(base, inc)
+            if os.path.isdir(path):
+                cflags.append(f"-I{path}")
+
+    return cflags
+
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+def main() -> None:
     if os.uname().sysname.lower() != "linux":
         print("This tool requires Linux (eBPF/BCC).", file=sys.stderr)
         sys.exit(1)
 
     args = parse_args()
 
+    # Prepare log file
     log_file = args.log_file
     try:
         if not os.path.exists(log_file):
             with open(log_file, "w") as f:
                 f.write("Enhanced Socket Monitoring Log\n" + "=" * 60 + "\n")
     except PermissionError:
-        print(f"Warning: cannot write to {log_file}; falling back to ./socket_monitor.log", file=sys.stderr)
+        print(
+            f"Warning: cannot write to {log_file}; falling back to ./socket_monitor.log",
+            file=sys.stderr,
+        )
         log_file = "./socket_monitor.log"
 
-    from bcc import BPF   # lazy import so tests don’t need bcc
-    b = BPF(text=BPF_PROGRAM)
+    # Lazy import so unit tests can run without BCC
+    try:
+        from bcc import BPF
+    except ImportError:
+        print("Error: python3-bcc (BCC bindings) not available.", file=sys.stderr)
+        sys.exit(1)
 
-    metrics = {
+    # Resolve kernel include paths for containerized host-tracing setups
+    cflags = resolve_kernel_include_cflags()
+    if cflags:
+        print(f"[socket-snoop] Using extra BPF cflags: {cflags}", file=sys.stderr)
+
+    # Compile BPF program
+    try:
+        if cflags:
+            b = BPF(text=BPF_PROGRAM, cflags=cflags)
+        else:
+            b = BPF(text=BPF_PROGRAM)
+    except Exception as e:
+        print(f"[socket-snoop] Failed to compile BPF program: {e}", file=sys.stderr)
+        # Hint for containerized use
+        print(
+            "[socket-snoop] Hint: make sure the host kernel headers are available "
+            "inside the container (e.g. mount /lib/modules and /usr/src) and that "
+            "kernel/BCC versions are compatible.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    metrics: Dict[str, int] = {
         "active_connections": 0,
         "closing_connections": 0,
         "closed_connections": 0,
     }
-    recent_events = deque(maxlen=2000)
+    recent_events: deque = deque(maxlen=2000)
 
-    def handle_event(cpu, data, size):
+    def handle_event(cpu: int, data: Any, size: int) -> None:
         event = b["events"].event(data)
         state_str = TCP_STATES.get(event.state, "UNKNOWN STATE")
         timestamp = datetime.now().strftime("%b %d %Y %H:%M:%S.%f")[:-3]
@@ -174,29 +281,45 @@ def main():
         src_ip = format_ip(event.src_ip)
         dst_ip = format_ip(event.dst_ip)
 
-        if args.pid and event.pid != args.pid: return
-        if args.src_ip and src_ip != args.src_ip: return
-        if args.dst_ip and dst_ip != args.dst_ip: return
-        if args.src_port and event.src_port != args.src_port: return
-        if args.dst_port and event.dst_port != args.dst_port: return
-        if args.active_only and event.state != 1: return
+        # User-space filters (cheap, flexible)
+        if args.pid is not None and int(event.pid) != args.pid:
+            return
+        if args.src_ip and src_ip != args.src_ip:
+            return
+        if args.dst_ip and dst_ip != args.dst_ip:
+            return
+        if args.src_port is not None and int(event.src_port) != args.src_port:
+            return
+        if args.dst_port is not None and int(event.dst_port) != args.dst_port:
+            return
+        if args.active_only and int(event.state) != 1:
+            return
 
-        if event.state == 1:
+        # Simple metrics
+        st = int(event.state)
+        if st == 1:
             metrics["active_connections"] += 1
-        elif event.state in (4,5,8,9,11):
+        elif st in (4, 5, 8, 9, 11):
             metrics["closing_connections"] += 1
-        elif event.state in (6,7):
+        elif st in (6, 7):
             if metrics["active_connections"] > 0:
                 metrics["active_connections"] -= 1
             metrics["closed_connections"] += 1
 
-        event_key = (src_ip, int(event.src_port), dst_ip, int(event.dst_port),
-                     int(event.pid), int(event.state))
+        # De-dup rapid repeats
+        event_key = (
+            src_ip,
+            int(event.src_port),
+            dst_ip,
+            int(event.dst_port),
+            int(event.pid),
+            st,
+        )
         if event_key in recent_events:
             return
         recent_events.append(event_key)
 
-        entry = {
+        entry: Dict[str, Any] = {
             "timestamp": timestamp,
             "event": event.event.decode(errors="ignore"),
             "src_ip": src_ip,
@@ -205,7 +328,9 @@ def main():
             "dst_port": int(event.dst_port),
             "protocol": "TCP",
             "state": state_str,
-            "connection_id": connection_id(src_ip, int(event.src_port), dst_ip, int(event.dst_port)),
+            "connection_id": connection_id(
+                src_ip, int(event.src_port), dst_ip, int(event.dst_port)
+            ),
             "metrics": dict(metrics),
             "pid": int(event.pid),
             "ppid": int(event.ppid),
@@ -220,6 +345,7 @@ def main():
         except Exception as e:
             print(f"Log write failed: {e}", file=sys.stderr)
 
+    # Attach perf buffer
     b["events"].open_perf_buffer(handle_event)
     print(f"Monitoring socket connections. Logging to {log_file}")
     try:
@@ -228,5 +354,7 @@ def main():
     except KeyboardInterrupt:
         print("\nStopping monitoring...")
 
+
 if __name__ == "__main__":
     main()
+
