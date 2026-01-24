@@ -1,0 +1,16 @@
+[Unit]
+Description=ktrace snapshot (%i seconds)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# %i is duration seconds (e.g. 60)
+ExecStart=/usr/local/bin/ktrace --duration=%is --out-dir=/var/log/ktrace --quiet=true
+# Ensure output dir exists
+ExecStartPre=/bin/mkdir -p /var/log/ktrace
+# Best practices: never run continuously; this is a snapshot tool.
+# Security: metadata-only by design.
+
+[Install]
+WantedBy=multi-user.target

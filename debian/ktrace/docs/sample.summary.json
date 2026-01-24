@@ -1,0 +1,51 @@
+{
+  "tool": "ktrace",
+  "version": "0.9.0",
+  "node": "etcd-1",
+  "ts_start": "2026-01-24T21:57:00.000Z",
+  "ts_end": "2026-01-24T21:58:00.000Z",
+  "events_written": 12345,
+  "drops_ringbuf": 12,
+  "top": {
+    "comm": [
+      {
+        "key": "coredns",
+        "count": 4200
+      },
+      {
+        "key": "kubelet",
+        "count": 1800
+      }
+    ],
+    "ports": [
+      {
+        "key": "53",
+        "count": 8000
+      },
+      {
+        "key": "6443",
+        "count": 700
+      }
+    ],
+    "tcp_transitions": [
+      {
+        "key": "SYN_SENT->ESTABLISHED",
+        "count": 500
+      },
+      {
+        "key": "ESTABLISHED->FIN_WAIT1",
+        "count": 480
+      }
+    ]
+  },
+  "dns_suspects": [
+    {
+      "namespace": "default",
+      "pod": "app-xyz",
+      "container": "app",
+      "udp_sends": 320,
+      "udp_recvs": 0,
+      "interpretation": "Many DNS sends but no DNS receives observed. Check CoreDNS/NodeLocalDNS/policy/routing."
+    }
+  ]
+}

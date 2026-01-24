@@ -1,0 +1,6 @@
+dist/
+out/
+bpf/vmlinux.h
+internal/bpf/ktrace_bpf*.go
+internal/bpf/ktrace*.o
+*.bundle.tgz

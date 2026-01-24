@@ -1,0 +1,76 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: ktrace
+  namespace: kube-system
+  labels:
+    app: ktrace
+spec:
+  selector:
+    matchLabels:
+      app: ktrace
+  template:
+    metadata:
+      labels:
+        app: ktrace
+    spec:
+      hostPID: true
+      hostNetwork: true
+      tolerations:
+        - operator: Exists
+      containers:
+        - name: ktrace
+          # Build/publish your own image that contains the ktrace binary at /ktrace
+          image: ghcr.io/your-org/ktrace:latest
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            privileged: true
+            readOnlyRootFilesystem: true
+          command: ["/bin/sh", "-c"]
+          args:
+            - >
+              /ktrace
+              --duration=60s
+              --out-dir=/out
+              --with-cri=true
+              --with-conntrack=true
+              --dns-only=false
+              --ignore-loopback=true
+              --sample=1
+              --quiet=true
+              ;
+              # Keep the pod alive so bundles can be collected from the node.
+              sleep 3600
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          volumeMounts:
+            - name: host-proc
+              mountPath: /proc
+              readOnly: true
+            - name: host-sys
+              mountPath: /sys
+              readOnly: true
+            - name: host-run
+              mountPath: /run
+              readOnly: true
+            - name: out
+              mountPath: /out
+      volumes:
+        - name: host-proc
+          hostPath:
+            path: /proc
+        - name: host-sys
+          hostPath:
+            path: /sys
+        - name: host-run
+          hostPath:
+            path: /run
+        - name: out
+          hostPath:
+            path: /var/log/ktrace
+            type: DirectoryOrCreate
