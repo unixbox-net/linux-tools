@@ -13,6 +13,9 @@ help:
 .PHONY: generate
 generate:
 	@./scripts/gen-vmlinuxh.sh ./bpf/vmlinux.h
+	@# Ensure tool deps are present (bpf2go) and module deps are resolved.
+	@command -v bpf2go >/dev/null 2>&1 || (echo "[generate] installing bpf2go" && $(GO) install github.com/cilium/ebpf/cmd/bpf2go@latest)
+	@$(GO) mod tidy -tags tools
 	@$(GO) generate ./...
 
 .PHONY: build

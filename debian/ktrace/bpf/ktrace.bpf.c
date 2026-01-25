@@ -14,9 +14,49 @@
 #include <bpf/bpf_core_read.h>
 #include <bpf/bpf_endian.h>
 
-#include <linux/in.h>
-#include <linux/in6.h>
-#include <linux/socket.h>
+/*
+ * CO-RE / vmlinux.h build note
+ * ---------------------------
+ *
+ * This BPF program is compiled using a generated vmlinux.h (BTF types),
+ * which already contains many kernel type definitions and constants.
+ *
+ * On Fedora (and many other distros), including userspace kernel headers
+ * like <linux/in.h>, <linux/socket.h>, etc. *in addition* to vmlinux.h
+ * can cause a storm of "redefinition" errors (posix_types, IPPROTO_*,
+ * sockaddr_storage, etc.).
+ *
+ * Therefore: avoid including linux/* headers here. Instead we provide
+ * minimal sockaddr definitions we need for reading msg->msg_name.
+ */
+
+#ifndef AF_INET
+#define AF_INET 2
+#endif
+
+#ifndef AF_INET6
+#define AF_INET6 10
+#endif
+
+struct sockaddr {
+    __u16 sa_family;
+    __u8  sa_data[14];
+};
+
+struct sockaddr_in {
+    __u16 sin_family;
+    __u16 sin_port; /* network byte order */
+    __u32 sin_addr; /* network byte order */
+    __u8  __pad[8];
+};
+
+struct sockaddr_in6 {
+    __u16 sin6_family;
+    __u16 sin6_port; /* network byte order */
+    __u32 sin6_flowinfo;
+    struct in6_addr sin6_addr;
+    __u32 sin6_scope_id;
+};
 
 char LICENSE[] SEC("license") = "GPL";
 __u32 VERSION SEC("version") = 1;
