@@ -9,6 +9,11 @@
 
 #include "vmlinux.h"
 
+// Required for PT_REGS_PARMn() helpers used by <bpf/bpf_tracing.h>
+#ifndef __TARGET_ARCH_x86
+#define __TARGET_ARCH_x86 1
+#endif
+
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_tracing.h>
 #include <bpf/bpf_core_read.h>
@@ -26,8 +31,8 @@
  * can cause a storm of "redefinition" errors (posix_types, IPPROTO_*,
  * sockaddr_storage, etc.).
  *
- * Therefore: avoid including linux/* headers here. Instead we provide
- * minimal sockaddr definitions we need for reading msg->msg_name.
+ * Therefore: avoid including linux headers here. Instead we provide
+ * Therefore: avoid including linux headers here. Rely on vmlinux.h/BTF types only.
  */
 
 #ifndef AF_INET
@@ -38,25 +43,6 @@
 #define AF_INET6 10
 #endif
 
-struct sockaddr {
-    __u16 sa_family;
-    __u8  sa_data[14];
-};
-
-struct sockaddr_in {
-    __u16 sin_family;
-    __u16 sin_port; /* network byte order */
-    __u32 sin_addr; /* network byte order */
-    __u8  __pad[8];
-};
-
-struct sockaddr_in6 {
-    __u16 sin6_family;
-    __u16 sin6_port; /* network byte order */
-    __u32 sin6_flowinfo;
-    struct in6_addr sin6_addr;
-    __u32 sin6_scope_id;
-};
 
 char LICENSE[] SEC("license") = "GPL";
 __u32 VERSION SEC("version") = 1;
@@ -79,7 +65,6 @@ struct ktrace_config {
     __u16 port_allow[KTRACE_PORT_ALLOW_MAX];
     __u16 port_allow_len;            // number of valid ports in port_allow
     __u8  enable_ns;                 // include namespace inode IDs
-    __u8  enable_security;           // include seccomp/caps (best-effort)
     __u16 _pad;
 };
 
@@ -99,13 +84,9 @@ struct ktrace_event {
     __u32 mntns;
     __u32 pidns;
     __u32 userns;
-
-    __u32 seccomp_mode;
     __u32 fd;                        // only used for connect()
 
     __u64 cgroup_id;
-
-    __u32 cap_eff[2];                // raw kernel_cap_t (best-effort)
     __u32 _pad2;
 
     char comm[KTRACE_COMM_LEN];
@@ -243,28 +224,6 @@ static __always_inline void fill_ns_and_security(struct ktrace_event *e, struct 
             if (pid_ns) e->pidns = BPF_CORE_READ(pid_ns, ns.inum);
         }
     }
-
-    if (cfg->enable_security) {
-        struct task_struct *task = (struct task_struct *)bpf_get_current_task_btf();
-        if (!task) return;
-
-        // seccomp mode (0=disabled, 1=strict, 2=filter)
-        e->seccomp_mode = BPF_CORE_READ(task, seccomp, mode);
-
-        // creds/caps (best-effort)
-        struct cred *cred = BPF_CORE_READ(task, real_cred);
-        if (cred) {
-            // user namespace inum (best-effort)
-            struct user_namespace *uns = BPF_CORE_READ(cred, user_ns);
-            if (uns) e->userns = BPF_CORE_READ(uns, ns.inum);
-
-            // kernel_cap_t layout differs across kernels; vmlinux.h provides the layout for CO-RE.
-            // Most modern kernels use struct kernel_cap_struct { __u32 cap[2]; }.
-            struct kernel_cap_struct cap = {};
-            BPF_CORE_READ_INTO(&cap, cred, cap_effective);
-            e->cap_eff[0] = cap.cap[0];
-            e->cap_eff[1] = cap.cap[1];
-        }
     }
 }
 
