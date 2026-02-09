@@ -1,7 +1,44 @@
 #!/usr/bin/env bash
-# deploy-beta.v3.sh — 3 roles: master / etcd / worker
-# 
+
+# COMMENT<<
+# deploy-beta.v3.sh — Proxmox “one command” cluster bring-up (master + etcd + workers)
 #
+# What it does
+#   - Builds a custom Debian netinst ISO *per node* (preseeded, noninteractive).
+#   - Creates/destroys and provisions VMs on a chosen Proxmox host via SSH (qm).
+#   - On first boot each VM runs a one-time postinstall:
+#       * master: WireGuard hub + Salt master (+ API), Ansible setup, kubectl, Helm, nftables,
+#                 and an optional kubeadm+Calico+Helm autobootstrap workflow.
+#       * etcd:   Salt minion, WireGuard peer, containerd+kubeadm+kubectl, Helm, k8s-ready sysctls.
+#       * worker: Salt minion, WireGuard peer, containerd+kubeadm, k8s-ready sysctls.
+#
+# How it works (high level)
+#   1) mk_iso(): mounts ISO_ORIG read-only, copies contents, injects /darksite payload + preseed.cfg,
+#      patches BIOS/UEFI bootloader to boot “auto (preseed)”, regenerates md5sum, and writes a new ISO.
+#   2) pmx_deploy_vm(): uploads the ISO to Proxmox, creates the VM, attaches ISO, starts install.
+#   3) The Debian installer runs unattended; late_command installs bootstrap.service which runs
+#      /root/darksite/postinstall.sh exactly once, then powers off.
+#   4) Script flips VM boot to disk and (optionally) leaves it running.
+#
+# Why this is better than ad-hoc imaging
+#   - Reproducible + idempotent: same inputs → same machines; rebuild/replace nodes easily.
+#   - Role-based config with guardrails: noninteractive apt, sane sysctls/modules, containerd cgroups,
+#     nftables that won’t break Kubernetes forwarding, and Calico installed via Tigera Operator.
+#   - Built-in management plane: WireGuard + Salt grains drive peer sync and inventory generation.
+#
+# What you need (requirements)
+#   - Run this script as root on a Linux box with: ssh/scp, xorriso, mount/umount, perl, sed, rsync.
+#   - SSH access as root to the target Proxmox host (PROXMOX_HOST or INPUT=1/2/3).
+#   - A Debian netinst ISO at ISO_ORIG, and enough Proxmox storage (VM_STORAGE/ISO_STORAGE).
+#   - Network reachability from VMs to Debian repos + k8s/calico/helm sources (unless your /payload/darksite
+#     mirrors those; “darksite” is copied into the ISO and executed as /root/darksite/postinstall.sh).
+#
+# Quick start
+#   - Set at minimum: ISO_ORIG and PRESEED_ROOT_PASSWORD_HASH (recommended).
+#   - Optionally adjust NODE_SPEC (vmid/name/role/lan_ip/wg_cidr), counts/sizing, and K8S/CALICO/HELM toggles.
+#   - Run: TARGET=proxmox-all INPUT=1 ./deploy-beta.v3.sh
+# COMMENT>>
+
 set -Eeuo pipefail
 IFS=$'\n\t'
 umask 022
