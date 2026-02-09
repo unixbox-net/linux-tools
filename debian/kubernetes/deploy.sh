@@ -1,17 +1,6 @@
 #!/usr/bin/env bash
 # deploy-beta.v3.sh — 3 roles: master / etcd / worker
-#
-# UPDATED (beta.v3):
-#   - etcd stays cattle, but gets gold-standard k8s+calico+helm bashrc
-#   - helm installed on master + etcd
-#   - ansible user + keys on ALL nodes (and ansible pkg)
-#   - k8s/cni prereqs hardened: extra modules + sysctls
-#   - FIX: node nftables FORWARD is no longer policy drop (breaks k8s networking)
-#   - helm-autobootstrap hook runs after cluster bootstrap (exec /srv/k8s/helm/bootstrap.sh)
-#   - FIX(beta3): install Calico using Tigera Operator (tigera-operator.yaml + custom-resources.yaml)
-#   - FIX(beta3): open Calico Typha port 5473 (LAN)
-#   - FIX(beta3): add rp_filter=0 + src_valid_mark=1 sysctls (Calico/WG friendliness)
-#   - FIX(beta3): ensure /opt/cni/bin exists + has plugin binaries
+# 
 #
 set -Eeuo pipefail
 IFS=$'\n\t'
